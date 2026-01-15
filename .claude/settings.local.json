@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(JS_RUNTIME=hermes ./gradlew:*)",
+      "Bash(tree:*)",
+      "Skill(Graphite)",
+      "Bash(gt info:*)",
+      "Bash(gt bottom:*)",
+      "Bash(gt top:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gt ls:*)",
+      "Bash(gh api:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run view:*)",
+      "Bash(ls:*)",
+      "Bash(yarn lint:*)",
+      "Bash(et check-packages:*)"
+    ]
+  }
+}
