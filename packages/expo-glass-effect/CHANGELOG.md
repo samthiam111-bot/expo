@@ -8,6 +8,8 @@
 
 ### 🎉 New features
 
+- Add animation config to `glassEffectStyle` ([#42005](https://github.com/expo/expo/pull/42005) by [@nishan](https://github.com/intergalacticspacehighway))
+
 ### 🐛 Bug fixes
 
 - Add `isGlassEffectAPIAvailable` API to prevent some iOS 26 beta version crashes ([#40992](https://github.com/expo/expo/pull/40992) by [@nishan](https://github.com/intergalacticspacehighway))
