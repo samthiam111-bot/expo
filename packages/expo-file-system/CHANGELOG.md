@@ -6,6 +6,8 @@
 
 ### 🎉 New features
 
+- Add `overwrite` option to copy and move methods.
+
 ### 🐛 Bug fixes
 
 - [Android] Fix bundle directory listing returning incorrect names, URIs and trailing slashes for files. ([#42882](https://github.com/expo/expo/pull/42882) by [@aleqsio](https://github.com/aleqsio))
