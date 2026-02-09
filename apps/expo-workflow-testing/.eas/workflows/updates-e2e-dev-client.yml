@@ -113,13 +113,21 @@ jobs:
               cat "$LOG_FILE"
             fi
           done
+      - name: Start packager
+        id: packager
+        working_directory: ../..
+        run: |
+          export RECORDINGS_HOME=$PWD
+          cd ../updates-e2e
+          echo "Starting packager..."
+          CI=false npx expo start --private-key-path ./keys/private-key.pem > "$RECORDINGS_HOME/screen-recordings/packager.log" 2>&1 &
+          echo "Packager started."
       - name: Run Maestro tests (debug)
         id: testdebug
         continue: true
         working_directory: ../../../updates-e2e
         run: |
           # start packager
-          yarn start:dev-client
           ./maestro/maestro-test-executor.sh ./maestro/tests/updates-e2e-dev-client.yml ios debug || true
       - name: Stop screen recording
         id: recordingstop
