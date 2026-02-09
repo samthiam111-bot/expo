@@ -33,7 +33,7 @@ concurrency:
 
 defaults:
   tools:
-    node: 22.14.0
+    node: 22.22.0
     yarn: 1.22.22
 
 jobs:
@@ -91,8 +91,9 @@ jobs:
 
             LOG_FILE="$RECORDINGS_HOME/screen-recordings/$UDID.log"
             PID_FILE="$RECORDINGS_HOME/screen-recordings/$UDID.pid"
+            RECORDING_MOV="$RECORDINGS_HOME/screen-recordings/$UDID.mov"
 
-            xcrun simctl io "$UDID" recordVideo -f ~/screen-recordings/$UDID.mov > "$LOG_FILE" 2>&1 < /dev/null &
+            xcrun simctl io "$UDID" recordVideo -f $RECORDING_MOV > "$LOG_FILE" 2>&1 < /dev/null &
             RECORDING_PID=$!
             echo $RECORDING_PID > "$PID_FILE"
             echo "Log file at $LOG_FILE"
