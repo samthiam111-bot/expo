@@ -78,10 +78,11 @@ jobs:
           device_identifier: iPhone 17
       - name: Start screen recording
         id: recordingstart
-        working_directory: ../../../updates-e2e
+        working_directory: ../..
         run: |
           export RECORDINGS_HOME=$PWD
-          set-output RECORDINGS_HOME $RECORDINGS_HOME
+          set-output RECORDINGS_HOME "$RECORDINGS_HOME"
+          echo "Recordings home at $RECORDINGS_HOME"
           SIMULATOR_UDIDS=$(xcrun simctl list -v devices booted -j | jq --raw-output '.devices | .[] | .[] | .udid')
           mkdir -p "$RECORDINGS_HOME/screen-recordings"
 
@@ -94,6 +95,7 @@ jobs:
             xcrun simctl io "$UDID" recordVideo -f ~/screen-recordings/$UDID.mov > "$LOG_FILE" 2>&1 < /dev/null &
             RECORDING_PID=$!
             echo $RECORDING_PID > "$PID_FILE"
+            echo "Log file at $LOG_FILE"
 
             i=0
             while [ $i -lt 20 ]; do
@@ -108,6 +110,7 @@ jobs:
 
             if [ $i -eq 20 ]; then
               echo " failed (recording not started)."
+              cat "$LOG_FILE"
             fi
           done
       - name: Run Maestro tests (debug)
@@ -120,7 +123,7 @@ jobs:
           ./maestro/maestro-test-executor.sh ./maestro/tests/updates-e2e-dev-client.yml ios debug || true
       - name: Stop screen recording
         id: recordingstop
-        working_directory: ../../../updates-e2e
+        working_directory: ../..
         run: |
           SIMULATOR_UDIDS=$(xcrun simctl list -v devices booted -j | jq --raw-output '.devices | .[] | .[] | .udid')
 
@@ -154,7 +157,7 @@ jobs:
           done
       - name: Prepare screen recording
         id: recordingprepare
-        working_directory: ../../../updates-e2e
+        working_directory: ../..
         run: |
           RECORDINGS_DIR="$RECORDINGS_HOME/screen-recordings"
           RECORDING_FILES=$(find "$RECORDINGS_DIR" -type f -print)
