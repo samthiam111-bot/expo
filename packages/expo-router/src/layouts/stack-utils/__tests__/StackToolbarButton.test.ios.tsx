@@ -11,6 +11,23 @@ import {
   StackToolbarBadge,
 } from '../toolbar/toolbar-primitives';
 
+jest.mock('../../../toolbar/RouterToolbarItemWithImageSupport', () => {
+  const actual = jest.requireActual(
+    '../../../toolbar/RouterToolbarItemWithImageSupport'
+  ) as typeof import('../../../toolbar/RouterToolbarItemWithImageSupport');
+  return {
+    RouterToolbarItemWithImageSupport: jest.fn((props) => (
+      <actual.RouterToolbarItemWithImageSupport {...props} />
+    )),
+  };
+});
+
+jest.mock('expo-image', () => ({
+  useImage: () => ({
+    __expo_shared_object_id__: 1,
+  }),
+}));
+
 jest.mock('../../../toolbar/native', () => {
   const { View }: typeof import('react-native') = jest.requireActual('react-native');
   return {
@@ -25,6 +42,14 @@ const { RouterToolbarItem } = jest.requireMock(
   '../../../toolbar/native'
 ) as typeof import('../../../toolbar/native');
 const MockedRouterToolbarItem = RouterToolbarItem as jest.MockedFunction<typeof RouterToolbarItem>;
+
+const { RouterToolbarItemWithImageSupport } = jest.requireMock(
+  '../../../toolbar/RouterToolbarItemWithImageSupport'
+) as typeof import('../../../toolbar/RouterToolbarItemWithImageSupport');
+const MockedRouterToolbarItemWithImageSupport =
+  RouterToolbarItemWithImageSupport as jest.MockedFunction<
+    typeof RouterToolbarItemWithImageSupport
+  >;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -155,6 +180,23 @@ describe('StackToolbarButton component', () => {
     expect(MockedRouterToolbarItem).toHaveBeenCalledWith(
       expect.objectContaining({
         systemImageName: 'star.fill',
+      }),
+      undefined
+    );
+  });
+
+  it('passes xcassetName to RouterToolbarItemWithImageSupport when xcasset icon is used', () => {
+    render(
+      <ToolbarPlacementContext.Provider value="bottom">
+        <StackToolbarButton>
+          <StackToolbarIcon xcasset="custom-icon" />
+        </StackToolbarButton>
+      </ToolbarPlacementContext.Provider>
+    );
+
+    expect(MockedRouterToolbarItemWithImageSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        xcassetName: 'custom-icon',
       }),
       undefined
     );
@@ -342,6 +384,94 @@ describe('StackToolbarButton component', () => {
         );
       }).toThrow(
         'Stack.Toolbar.Button only accepts a single string or Stack.Toolbar.Label, Stack.Toolbar.Icon, and Stack.Toolbar.Badge as its children.'
+      );
+    });
+  });
+
+  describe('imageSource support', () => {
+    it('passes imageSource when icon is ImageSourcePropType', () => {
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarButton icon={{ uri: 'https://example.com/icon.png' }}>
+            Test
+          </StackToolbarButton>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(MockedRouterToolbarItemWithImageSupport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageSource: { uri: 'https://example.com/icon.png' },
+        }),
+        undefined
+      );
+    });
+
+    it('passes imageSource when Icon child with src is used', () => {
+      const source = { uri: 'https://example.com/icon.png' };
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarButton>
+            <StackToolbarIcon src={source} />
+          </StackToolbarButton>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(MockedRouterToolbarItemWithImageSupport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageSource: source,
+        }),
+        undefined
+      );
+    });
+
+    it('does not pass imageSource for SF Symbol icon', () => {
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarButton icon="star.fill">Test</StackToolbarButton>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(MockedRouterToolbarItemWithImageSupport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageSource: undefined,
+        }),
+        undefined
+      );
+    });
+
+    it('renderingMode from Icon child takes priority over iconRenderingMode prop', () => {
+      const source = { uri: 'https://example.com/icon.png' };
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarButton iconRenderingMode="original">
+            <StackToolbarIcon src={source} renderingMode="template" />
+          </StackToolbarButton>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(MockedRouterToolbarItemWithImageSupport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageRenderingMode: 'template',
+        }),
+        undefined
+      );
+    });
+
+    it('falls back to iconRenderingMode when Icon child has no renderingMode', () => {
+      const source = { uri: 'https://example.com/icon.png' };
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarButton iconRenderingMode="original">
+            <StackToolbarIcon src={source} />
+          </StackToolbarButton>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(MockedRouterToolbarItemWithImageSupport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageRenderingMode: 'original',
+        }),
+        undefined
       );
     });
   });

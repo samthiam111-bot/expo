@@ -4,13 +4,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StackToolbarMenuAction = exports.StackToolbarMenu = void 0;
 exports.convertStackToolbarMenuPropsToRNHeaderItem = convertStackToolbarMenuPropsToRNHeaderItem;
 exports.convertStackToolbarMenuActionPropsToRNHeaderItem = convertStackToolbarMenuActionPropsToRNHeaderItem;
+const expo_image_1 = require("expo-image");
 const react_1 = require("react");
 const react_native_1 = require("react-native");
 const context_1 = require("./context");
 const shared_1 = require("./shared");
 const toolbar_primitives_1 = require("./toolbar-primitives");
 const elements_1 = require("../../../link/elements");
-const native_1 = require("../../../link/preview/native");
+const NativeLinkPreviewActionWithImageSupport_1 = require("../../../link/preview/NativeLinkPreviewActionWithImageSupport");
 const children_1 = require("../../../utils/children");
 /**
  * Computes the label and menu title from children and title prop.
@@ -71,6 +72,9 @@ const StackToolbarMenu = (props) => {
     const computedLabel = sharedProps?.label;
     const computedMenuTitle = sharedProps?.menu?.title;
     const icon = sharedProps?.icon?.type === 'sfSymbol' ? sharedProps.icon.name : undefined;
+    const xcassetName = (0, shared_1.extractXcassetName)(props);
+    const imageSourceInfo = (0, shared_1.extractImageSource)(props);
+    const renderingMode = imageSourceInfo?.renderingMode ?? props.iconRenderingMode;
     if (process.env.NODE_ENV !== 'production') {
         const allChildren = react_1.Children.toArray(props.children);
         if (allChildren.length !== validChildren.length) {
@@ -83,8 +87,7 @@ const StackToolbarMenu = (props) => {
             console.warn('Stack.Toolbar.Badge is not supported in bottom toolbar (iOS limitation). The badge will be ignored.');
         }
     }
-    // TODO(@ubax): Handle image loading using useImage in a follow-up PR.
-    return (<NativeToolbarMenu {...props} icon={icon} image={props.image} imageRenderingMode={props.iconRenderingMode} label={computedLabel} title={computedMenuTitle} children={validChildren}/>);
+    return (<NativeToolbarMenu {...props} icon={icon} xcassetName={xcassetName} imageSource={imageSourceInfo?.source} image={props.image} imageRenderingMode={renderingMode} label={computedLabel} title={computedMenuTitle} children={validChildren}/>);
 };
 exports.StackToolbarMenu = StackToolbarMenu;
 function convertStackToolbarMenuPropsToRNHeaderItem(props) {
@@ -187,8 +190,11 @@ const StackToolbarMenuAction = (props) => {
     if (placement !== 'bottom') {
         throw new Error('Stack.Toolbar.MenuAction must be used inside a Stack.Toolbar.Menu');
     }
-    // TODO(@ubax): Handle image loading using useImage in a follow-up PR.
     const icon = typeof props.icon === 'string' ? props.icon : undefined;
+    const imageSource = typeof props.icon !== 'string' && props.icon != null ? props.icon : undefined;
+    if (imageSource) {
+        return (<NativeToolbarMenuActionWithImage {...props} icon={icon} imageSource={imageSource} image={props.image} imageRenderingMode={props.iconRenderingMode}/>);
+    }
     return (<NativeToolbarMenuAction {...props} icon={icon} image={props.image} imageRenderingMode={props.iconRenderingMode}/>);
 };
 exports.StackToolbarMenuAction = StackToolbarMenuAction;
@@ -222,13 +228,11 @@ function convertStackToolbarMenuActionPropsToRNHeaderItem(props) {
  * Native toolbar menu component for bottom toolbar.
  * Renders as NativeLinkPreviewAction.
  */
-const NativeToolbarMenu = ({ accessibilityHint, accessibilityLabel, separateBackground, hidesSharedBackground, palette, inline, hidden, subtitle, title, label, destructive, children, icon, image, imageRenderingMode, tintColor, variant, style, elementSize, }) => {
+const NativeToolbarMenu = ({ accessibilityHint, accessibilityLabel, separateBackground, hidesSharedBackground, palette, inline, hidden, subtitle, title, label, destructive, children, icon, xcassetName, imageSource, image, imageRenderingMode, tintColor, variant, style, elementSize, }) => {
     const identifier = (0, react_1.useId)();
     const titleStyle = react_native_1.StyleSheet.flatten(style);
     const renderingMode = imageRenderingMode ?? (tintColor !== undefined ? 'template' : 'original');
-    return (<native_1.NativeLinkPreviewAction sharesBackground={!separateBackground} hidesSharedBackground={hidesSharedBackground} hidden={hidden} icon={icon} 
-    // TODO(@ubax): Handle image loading using useImage in a follow-up PR.
-    image={image} imageRenderingMode={renderingMode} destructive={destructive} subtitle={subtitle} accessibilityLabel={accessibilityLabel} accessibilityHint={accessibilityHint} displayAsPalette={palette} displayInline={inline} preferredElementSize={elementSize} tintColor={tintColor} titleStyle={titleStyle} barButtonItemStyle={variant === 'done' ? 'prominent' : variant} title={title ?? ''} label={label} onSelected={() => { }} children={children} identifier={identifier}/>);
+    return (<NativeLinkPreviewActionWithImageSupport_1.NativeLinkPreviewActionWithImageSupport sharesBackground={!separateBackground} hidesSharedBackground={hidesSharedBackground} hidden={hidden} icon={icon} xcassetName={xcassetName} imageSource={imageSource} image={image} imageRenderingMode={renderingMode} destructive={destructive} subtitle={subtitle} accessibilityLabel={accessibilityLabel} accessibilityHint={accessibilityHint} displayAsPalette={palette} displayInline={inline} preferredElementSize={elementSize} tintColor={tintColor} titleStyle={titleStyle} barButtonItemStyle={variant === 'done' ? 'prominent' : variant} title={title ?? ''} label={label} onSelected={() => { }} children={children} identifier={identifier}/>);
 };
 // #endregion
 // #region NativeToolbarMenuAction
@@ -236,6 +240,15 @@ const NativeToolbarMenu = ({ accessibilityHint, accessibilityLabel, separateBack
  * Native toolbar menu action - reuses LinkMenuAction.
  */
 const NativeToolbarMenuAction = elements_1.LinkMenuAction;
+/**
+ * Wrapper that resolves ImageSourcePropType via useImage before passing to LinkMenuAction.
+ * Separate component to satisfy hooks rules (useImage must be called unconditionally).
+ */
+function NativeToolbarMenuActionWithImage(props) {
+    const { imageSource, ...rest } = props;
+    const resolvedImage = (0, expo_image_1.useImage)(imageSource);
+    return <NativeToolbarMenuAction {...rest} image={rest.image ?? resolvedImage}/>;
+}
 // #endregion
 const ALLOWED_CHILDREN = [
     exports.StackToolbarMenu,

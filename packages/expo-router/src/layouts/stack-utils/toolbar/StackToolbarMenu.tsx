@@ -4,7 +4,7 @@ import type {
   NativeStackHeaderItemMenuAction,
   NativeStackHeaderItemMenuSubmenu,
 } from '@react-navigation/native-stack';
-import type { ImageRef } from 'expo-image';
+import { useImage, type ImageRef, type ImageSource } from 'expo-image';
 import { Children, useId, useMemo, type ReactNode } from 'react';
 import {
   StyleSheet,
@@ -18,11 +18,13 @@ import type { SFSymbol } from 'sf-symbols-typescript';
 import { useToolbarPlacement } from './context';
 import {
   convertStackHeaderSharedPropsToRNSharedHeaderItem,
+  extractImageSource,
+  extractXcassetName,
   type StackHeaderItemSharedProps,
 } from './shared';
 import { StackToolbarLabel, StackToolbarIcon, StackToolbarBadge } from './toolbar-primitives';
 import { LinkMenuAction } from '../../../link/elements';
-import { NativeLinkPreviewAction } from '../../../link/preview/native';
+import { NativeLinkPreviewActionWithImageSupport } from '../../../link/preview/NativeLinkPreviewActionWithImageSupport';
 import {
   filterAllowedChildrenElements,
   getFirstChildOfType,
@@ -71,7 +73,7 @@ export interface StackToolbarMenuProps {
    */
   destructive?: boolean;
   disabled?: boolean;
-  // TODO(@ubax): Add useImage support in a follow-up PR.
+
   /**
    * Image to display for the menu item.
    *
@@ -96,8 +98,6 @@ export interface StackToolbarMenuProps {
    * Icon for the menu item.
    *
    * Can be an SF Symbol name or an image source.
-   *
-   * > **Note**: When used in `placement="bottom"`, only string SFSymbols are supported. Use the `image` prop to provide custom images.
    */
   icon?: StackHeaderItemSharedProps['icon'];
   /**
@@ -223,6 +223,9 @@ export const StackToolbarMenu: React.FC<StackToolbarMenuProps> = (props) => {
   const computedLabel = sharedProps?.label;
   const computedMenuTitle = sharedProps?.menu?.title;
   const icon = sharedProps?.icon?.type === 'sfSymbol' ? sharedProps.icon.name : undefined;
+  const xcassetName = extractXcassetName(props);
+  const imageSourceInfo = extractImageSource(props);
+  const renderingMode = imageSourceInfo?.renderingMode ?? props.iconRenderingMode;
 
   if (process.env.NODE_ENV !== 'production') {
     const allChildren = Children.toArray(props.children);
@@ -242,13 +245,14 @@ export const StackToolbarMenu: React.FC<StackToolbarMenuProps> = (props) => {
     }
   }
 
-  // TODO(@ubax): Handle image loading using useImage in a follow-up PR.
   return (
     <NativeToolbarMenu
       {...props}
       icon={icon}
+      xcassetName={xcassetName}
+      imageSource={imageSourceInfo?.source}
       image={props.image}
-      imageRenderingMode={props.iconRenderingMode}
+      imageRenderingMode={renderingMode}
       label={computedLabel}
       title={computedMenuTitle}
       children={validChildren}
@@ -362,7 +366,6 @@ export interface StackToolbarMenuActionProps {
    */
   disabled?: boolean;
   icon?: SFSymbol | ImageSourcePropType;
-  // TODO(@ubax): Add useImage support in a follow-up PR.
   /**
    * Image to display for the menu action.
    *
@@ -451,8 +454,21 @@ export const StackToolbarMenuAction: React.FC<StackToolbarMenuActionProps> = (pr
     throw new Error('Stack.Toolbar.MenuAction must be used inside a Stack.Toolbar.Menu');
   }
 
-  // TODO(@ubax): Handle image loading using useImage in a follow-up PR.
   const icon = typeof props.icon === 'string' ? props.icon : undefined;
+  const imageSource = typeof props.icon !== 'string' && props.icon != null ? props.icon : undefined;
+
+  if (imageSource) {
+    return (
+      <NativeToolbarMenuActionWithImage
+        {...props}
+        icon={icon}
+        imageSource={imageSource}
+        image={props.image}
+        imageRenderingMode={props.iconRenderingMode}
+      />
+    );
+  }
+
   return (
     <NativeToolbarMenuAction
       {...props}
@@ -505,7 +521,8 @@ interface NativeToolbarMenuProps {
   hidden?: boolean;
   hidesSharedBackground?: boolean;
   icon?: SFSymbol;
-  // TODO(@ubax): Add useImage support in a follow-up PR.
+  xcassetName?: string;
+  imageSource?: ImageSourcePropType;
   /**
    * Image to display for the menu item.
    */
@@ -540,6 +557,8 @@ const NativeToolbarMenu: React.FC<NativeToolbarMenuProps> = ({
   destructive,
   children,
   icon,
+  xcassetName,
+  imageSource,
   image,
   imageRenderingMode,
   tintColor,
@@ -552,12 +571,13 @@ const NativeToolbarMenu: React.FC<NativeToolbarMenuProps> = ({
   const titleStyle = StyleSheet.flatten(style);
   const renderingMode = imageRenderingMode ?? (tintColor !== undefined ? 'template' : 'original');
   return (
-    <NativeLinkPreviewAction
+    <NativeLinkPreviewActionWithImageSupport
       sharesBackground={!separateBackground}
       hidesSharedBackground={hidesSharedBackground}
       hidden={hidden}
       icon={icon}
-      // TODO(@ubax): Handle image loading using useImage in a follow-up PR.
+      xcassetName={xcassetName}
+      imageSource={imageSource}
       image={image}
       imageRenderingMode={renderingMode}
       destructive={destructive}
@@ -587,6 +607,22 @@ const NativeToolbarMenu: React.FC<NativeToolbarMenuProps> = ({
  * Native toolbar menu action - reuses LinkMenuAction.
  */
 const NativeToolbarMenuAction = LinkMenuAction;
+
+/**
+ * Wrapper that resolves ImageSourcePropType via useImage before passing to LinkMenuAction.
+ * Separate component to satisfy hooks rules (useImage must be called unconditionally).
+ */
+function NativeToolbarMenuActionWithImage(
+  props: Omit<StackToolbarMenuActionProps, 'icon'> & {
+    icon?: SFSymbol;
+    imageSource: ImageSourcePropType;
+    imageRenderingMode?: 'template' | 'original';
+  }
+) {
+  const { imageSource, ...rest } = props;
+  const resolvedImage = useImage(imageSource as ImageSource | number);
+  return <NativeToolbarMenuAction {...rest} image={rest.image ?? resolvedImage} />;
+}
 
 // #endregion
 

@@ -2,16 +2,24 @@
 import type { NativeStackHeaderItemButton } from '@react-navigation/native-stack';
 import type { ImageRef } from 'expo-image';
 import { Children, useId, useMemo, type ReactNode } from 'react';
-import { StyleSheet, type ColorValue, type StyleProp, type TextStyle } from 'react-native';
+import {
+  StyleSheet,
+  type ColorValue,
+  type ImageSourcePropType,
+  type StyleProp,
+  type TextStyle,
+} from 'react-native';
 import type { SFSymbol } from 'sf-symbols-typescript';
 
 import { useToolbarPlacement } from './context';
 import {
   convertStackHeaderSharedPropsToRNSharedHeaderItem,
+  extractImageSource,
+  extractXcassetName,
   type StackHeaderItemSharedProps,
 } from './shared';
 import { StackToolbarLabel, StackToolbarIcon, StackToolbarBadge } from './toolbar-primitives';
-import { RouterToolbarItem } from '../../../toolbar/native';
+import { RouterToolbarItemWithImageSupport } from '../../../toolbar/RouterToolbarItemWithImageSupport';
 import { filterAllowedChildrenElements, getFirstChildOfType } from '../../../utils/children';
 import type { BasicTextStyle } from '../../../utils/font';
 
@@ -77,11 +85,8 @@ export interface StackToolbarButtonProps {
    * Icon to display in the button.
    *
    * Can be a string representing an SFSymbol or an image source.
-   *
-   * > **Note**: When used in `placement="bottom"`, only string SFSymbols are supported. Use the `image` prop to provide custom images.
    */
   icon?: StackHeaderItemSharedProps['icon'];
-  // TODO(@ubax): Add useImage support in a follow-up PR.
   /**
    * Image to display in the button.
    *
@@ -206,14 +211,18 @@ export const StackToolbarButton: React.FC<StackToolbarButtonProps> = (props) => 
   }
 
   const sharedProps = convertStackHeaderSharedPropsToRNSharedHeaderItem(props);
-  // TODO(@ubax): Handle image loading using useImage in a follow-up PR.
   const icon = sharedProps?.icon?.type === 'sfSymbol' ? sharedProps.icon.name : undefined;
+  const xcassetName = extractXcassetName(props);
+  const imageSourceInfo = extractImageSource(props);
+  const renderingMode = imageSourceInfo?.renderingMode ?? props.iconRenderingMode;
   return (
     <NativeToolbarButton
       {...sharedProps}
       icon={icon}
+      xcassetName={xcassetName}
+      imageSource={imageSourceInfo?.source}
       image={props.image}
-      imageRenderingMode={props.iconRenderingMode}
+      imageRenderingMode={renderingMode}
     />
   );
 };
@@ -244,6 +253,8 @@ interface NativeToolbarButtonProps {
   hidden?: boolean;
   hidesSharedBackground?: boolean;
   icon?: SFSymbol;
+  xcassetName?: string;
+  imageSource?: ImageSourcePropType;
   image?: ImageRef;
   imageRenderingMode?: 'template' | 'original';
   onPress?: () => void;
@@ -265,7 +276,7 @@ const NativeToolbarButton: React.FC<NativeToolbarButtonProps> = (props) => {
   const renderingMode =
     props.imageRenderingMode ?? (props.tintColor !== undefined ? 'template' : 'original');
   return (
-    <RouterToolbarItem
+    <RouterToolbarItemWithImageSupport
       accessibilityHint={props.accessibilityHint}
       accessibilityLabel={props.accessibilityLabel}
       barButtonItemStyle={props.variant === 'done' ? 'prominent' : props.variant}
@@ -275,11 +286,13 @@ const NativeToolbarButton: React.FC<NativeToolbarButtonProps> = (props) => {
       identifier={id}
       image={props.image}
       imageRenderingMode={renderingMode}
+      imageSource={props.imageSource}
       onSelected={props.onPress}
       possibleTitles={props.possibleTitles}
       selected={props.selected}
       sharesBackground={!props.separateBackground}
       systemImageName={props.icon}
+      xcassetName={props.xcassetName}
       title={props.label}
       tintColor={props.tintColor}
       titleStyle={StyleSheet.flatten(props.style)}

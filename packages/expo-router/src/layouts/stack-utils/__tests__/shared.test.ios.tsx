@@ -1,5 +1,6 @@
 import {
   convertStackHeaderSharedPropsToRNSharedHeaderItem,
+  extractImageSource,
   extractXcassetName,
 } from '../toolbar/shared';
 import {
@@ -349,6 +350,40 @@ describe(convertStackHeaderSharedPropsToRNSharedHeaderItem, () => {
       });
     });
   });
+
+  describe('xcasset icon extraction', () => {
+    it('extracts xcasset icon from xcasset prop', () => {
+      const result = convertStackHeaderSharedPropsToRNSharedHeaderItem({
+        xcasset: 'prop-icon',
+      });
+      expect(result.icon).toEqual({
+        type: 'xcasset',
+        name: 'prop-icon',
+      });
+    });
+
+    it('Icon child takes precedence over xcasset prop', () => {
+      const result = convertStackHeaderSharedPropsToRNSharedHeaderItem({
+        children: <StackToolbarIcon sf="star.fill" />,
+        xcasset: 'prop-icon',
+      });
+      expect(result.icon).toEqual({
+        type: 'sfSymbol',
+        name: 'star.fill',
+      });
+    });
+
+    it('xcasset prop takes precedence over icon prop', () => {
+      const result = convertStackHeaderSharedPropsToRNSharedHeaderItem({
+        xcasset: 'prop-icon',
+        icon: 'star.fill',
+      });
+      expect(result.icon).toEqual({
+        type: 'xcasset',
+        name: 'prop-icon',
+      });
+    });
+  });
 });
 
 describe(extractXcassetName, () => {
@@ -400,5 +435,90 @@ describe(extractXcassetName, () => {
       ],
     });
     expect(result).toBe('my-icon');
+  });
+
+  it('returns undefined for SF Symbol icon', () => {
+    expect(extractXcassetName({ icon: 'star.fill' })).toBeUndefined();
+  });
+
+  it('returns undefined for ImageSourcePropType icon', () => {
+    expect(extractXcassetName({ icon: { uri: 'https://example.com/icon.png' } })).toBeUndefined();
+  });
+
+  it('returns xcasset name from xcasset prop', () => {
+    expect(extractXcassetName({ xcasset: 'prop-asset' })).toBe('prop-asset');
+  });
+
+  it('Icon child takes precedence over xcasset prop', () => {
+    expect(
+      extractXcassetName({
+        children: <StackToolbarIcon xcasset="child-asset" />,
+        xcasset: 'prop-asset',
+      })
+    ).toBe('child-asset');
+  });
+});
+
+describe(extractImageSource, () => {
+  it('returns undefined when no icon or children', () => {
+    expect(extractImageSource({})).toBeUndefined();
+  });
+
+  it('returns undefined for SF Symbol icon prop', () => {
+    expect(extractImageSource({ icon: 'star.fill' })).toBeUndefined();
+  });
+
+  it('returns undefined for xcasset Icon child', () => {
+    expect(
+      extractImageSource({
+        children: <StackToolbarIcon xcasset="my-asset" />,
+      })
+    ).toBeUndefined();
+  });
+
+  it('returns undefined for SF Symbol Icon child', () => {
+    expect(
+      extractImageSource({
+        children: <StackToolbarIcon sf="star.fill" />,
+      })
+    ).toBeUndefined();
+  });
+
+  it('returns source from ImageSourcePropType icon prop', () => {
+    const source = { uri: 'https://example.com/icon.png' };
+    const result = extractImageSource({ icon: source });
+    expect(result).toEqual({ source });
+  });
+
+  it('returns source and renderingMode from Icon child with src', () => {
+    const source = { uri: 'https://example.com/icon.png' };
+    const result = extractImageSource({
+      children: <StackToolbarIcon src={source} renderingMode="template" />,
+    });
+    expect(result).toEqual({ source, renderingMode: 'template' });
+  });
+
+  it('returns source without renderingMode when Icon child has no renderingMode', () => {
+    const source = { uri: 'https://example.com/icon.png' };
+    const result = extractImageSource({
+      children: <StackToolbarIcon src={source} />,
+    });
+    expect(result).toEqual({ source, renderingMode: undefined });
+  });
+
+  it('Icon child takes precedence over icon prop', () => {
+    const childSource = { uri: 'https://example.com/child.png' };
+    const propSource = { uri: 'https://example.com/prop.png' };
+    const result = extractImageSource({
+      children: <StackToolbarIcon src={childSource} renderingMode="original" />,
+      icon: propSource,
+    });
+    expect(result).toEqual({ source: childSource, renderingMode: 'original' });
+  });
+
+  it('returns source from numeric icon prop (require result)', () => {
+    // Simulates require('./icon.png') which returns a number
+    const result = extractImageSource({ icon: 42 as any });
+    expect(result).toEqual({ source: 42 });
   });
 });

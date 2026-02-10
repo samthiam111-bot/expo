@@ -1,30 +1,62 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.extractXcassetName = extractXcassetName;
+exports.extractImageSource = extractImageSource;
 exports.convertStackHeaderSharedPropsToRNSharedHeaderItem = convertStackHeaderSharedPropsToRNSharedHeaderItem;
 const react_1 = require("react");
 const toolbar_primitives_1 = require("./toolbar-primitives");
 const children_1 = require("../../../utils/children");
 const font_1 = require("../../../utils/font");
-/** @internal */
+/**
+ * Extracts xcasset name from icon component children or returns undefined.
+ * Used by bottom toolbar components to pass xcassetName to native views.
+ *
+ * @internal
+ */
 function extractXcassetName(props) {
+    // Icon child takes precedence
     const iconComponentProps = (0, children_1.getFirstChildOfType)(props.children, toolbar_primitives_1.StackToolbarIcon)?.props;
     if (iconComponentProps && 'xcasset' in iconComponentProps) {
         return iconComponentProps.xcasset;
     }
+    // Fall back to xcasset prop
+    return props.xcasset;
+}
+/**
+ * Extracts ImageSourcePropType from Icon child's `src` prop or from the `icon` prop (when non-string).
+ * Returns the source and optional renderingMode from the Icon child.
+ * Used by bottom toolbar components to pass imageSource to native views.
+ *
+ * @internal
+ */
+function extractImageSource(props) {
+    // Icon child takes precedence
+    const iconComponentProps = (0, children_1.getFirstChildOfType)(props.children, toolbar_primitives_1.StackToolbarIcon)?.props;
+    if (iconComponentProps && 'src' in iconComponentProps) {
+        return {
+            source: iconComponentProps.src,
+            renderingMode: 'renderingMode' in iconComponentProps ? iconComponentProps.renderingMode : undefined,
+        };
+    }
+    // Fall back to icon prop when non-string
+    if (props.icon && typeof props.icon !== 'string') {
+        return { source: props.icon };
+    }
     return undefined;
 }
 function convertStackHeaderSharedPropsToRNSharedHeaderItem(props) {
-    const { children, style, separateBackground, icon, ...rest } = props;
+    const { children, style, separateBackground, icon, xcasset, ...rest } = props;
     const stringChildren = react_1.Children.toArray(children)
         .filter((child) => typeof child === 'string')
         .join('');
     const label = (0, children_1.getFirstChildOfType)(children, toolbar_primitives_1.StackToolbarLabel);
-    const iconPropConvertedToIcon = props.icon
-        ? typeof props.icon === 'string'
-            ? { sf: props.icon }
-            : { src: props.icon }
-        : undefined;
+    const iconPropConvertedToIcon = props.xcasset
+        ? { xcasset: props.xcasset }
+        : props.icon
+            ? typeof props.icon === 'string'
+                ? { sf: props.icon }
+                : { src: props.icon }
+            : undefined;
     const iconComponentProps = (0, children_1.getFirstChildOfType)(children, toolbar_primitives_1.StackToolbarIcon)?.props ?? iconPropConvertedToIcon;
     const badgeComponent = (0, children_1.getFirstChildOfType)(children, toolbar_primitives_1.StackToolbarBadge);
     const rnsIcon = (() => {

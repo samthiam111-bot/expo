@@ -1,5 +1,5 @@
 import type { NativeStackHeaderItemMenu, NativeStackHeaderItemMenuAction } from '@react-navigation/native-stack';
-import type { ImageRef } from 'expo-image';
+import { type ImageRef } from 'expo-image';
 import { type ReactNode } from 'react';
 import { type ImageSourcePropType } from 'react-native';
 import type { SFSymbol } from 'sf-symbols-typescript';
@@ -51,8 +51,6 @@ export interface StackToolbarMenuProps {
      * Icon for the menu item.
      *
      * Can be an SF Symbol name or an image source.
-     *
-     * > **Note**: When used in `placement="bottom"`, only string SFSymbols are supported. Use the `image` prop to provide custom images.
      */
     icon?: StackHeaderItemSharedProps['icon'];
     /**

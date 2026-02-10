@@ -18,6 +18,14 @@ export interface StackHeaderItemSharedProps {
   tintColor?: ColorValue;
   icon?: SFSymbol | ImageSourcePropType;
   /**
+   * Name of an image in your Xcode asset catalog (`.xcassets`).
+   *
+   * The rendering mode is controlled by the asset catalog's "Render As" setting.
+   *
+   * @platform ios
+   */
+  xcasset?: string;
+  /**
    * Controls how image-based icons are rendered on iOS.
    *
    * - `'template'`: iOS applies tint color to the icon
@@ -58,11 +66,44 @@ type RNSharedHeaderItem = Pick<
   | 'accessibilityHint'
 >;
 
-/** @internal */
+/**
+ * Extracts xcasset name from icon component children or returns undefined.
+ * Used by bottom toolbar components to pass xcassetName to native views.
+ *
+ * @internal
+ */
 export function extractXcassetName(props: StackHeaderItemSharedProps): string | undefined {
+  // Icon child takes precedence
   const iconComponentProps = getFirstChildOfType(props.children, StackToolbarIcon)?.props;
   if (iconComponentProps && 'xcasset' in iconComponentProps) {
     return iconComponentProps.xcasset;
+  }
+  // Fall back to xcasset prop
+  return props.xcasset;
+}
+
+/**
+ * Extracts ImageSourcePropType from Icon child's `src` prop or from the `icon` prop (when non-string).
+ * Returns the source and optional renderingMode from the Icon child.
+ * Used by bottom toolbar components to pass imageSource to native views.
+ *
+ * @internal
+ */
+export function extractImageSource(
+  props: StackHeaderItemSharedProps
+): { source: ImageSourcePropType; renderingMode?: 'template' | 'original' } | undefined {
+  // Icon child takes precedence
+  const iconComponentProps = getFirstChildOfType(props.children, StackToolbarIcon)?.props;
+  if (iconComponentProps && 'src' in iconComponentProps) {
+    return {
+      source: iconComponentProps.src,
+      renderingMode:
+        'renderingMode' in iconComponentProps ? iconComponentProps.renderingMode : undefined,
+    };
+  }
+  // Fall back to icon prop when non-string
+  if (props.icon && typeof props.icon !== 'string') {
+    return { source: props.icon };
   }
   return undefined;
 }
@@ -70,16 +111,18 @@ export function extractXcassetName(props: StackHeaderItemSharedProps): string | 
 export function convertStackHeaderSharedPropsToRNSharedHeaderItem(
   props: StackHeaderItemSharedProps
 ): RNSharedHeaderItem {
-  const { children, style, separateBackground, icon, ...rest } = props;
+  const { children, style, separateBackground, icon, xcasset, ...rest } = props;
   const stringChildren = Children.toArray(children)
     .filter((child) => typeof child === 'string')
     .join('');
   const label = getFirstChildOfType(children, StackToolbarLabel);
-  const iconPropConvertedToIcon = props.icon
-    ? typeof props.icon === 'string'
-      ? { sf: props.icon }
-      : { src: props.icon }
-    : undefined;
+  const iconPropConvertedToIcon = props.xcasset
+    ? { xcasset: props.xcasset }
+    : props.icon
+      ? typeof props.icon === 'string'
+        ? { sf: props.icon }
+        : { src: props.icon }
+      : undefined;
   const iconComponentProps =
     getFirstChildOfType(children, StackToolbarIcon)?.props ?? iconPropConvertedToIcon;
   const badgeComponent = getFirstChildOfType(children, StackToolbarBadge);

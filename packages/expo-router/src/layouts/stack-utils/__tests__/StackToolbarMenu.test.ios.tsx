@@ -13,14 +13,18 @@ import {
   StackToolbarBadge,
 } from '../toolbar/toolbar-primitives';
 
-jest.mock('../../../link/preview/native', () => {
+jest.mock('../../../link/preview/NativeLinkPreviewActionWithImageSupport', () => {
   const { View }: typeof import('react-native') = jest.requireActual('react-native');
   return {
-    NativeLinkPreviewAction: jest.fn((props) => (
-      <View testID="NativeLinkPreviewAction" {...props} />
+    NativeLinkPreviewActionWithImageSupport: jest.fn((props) => (
+      <View testID="NativeLinkPreviewActionWithImageSupport" {...props} />
     )),
   };
 });
+
+jest.mock('expo-image', () => ({
+  useImage: jest.fn(() => null),
+}));
 
 jest.mock('../../../link/elements', () => {
   const { View }: typeof import('react-native') = jest.requireActual('react-native');
@@ -29,12 +33,13 @@ jest.mock('../../../link/elements', () => {
   };
 });
 
-const { NativeLinkPreviewAction } = jest.requireMock(
-  '../../../link/preview/native'
-) as typeof import('../../../link/preview/native');
-const MockedNativeLinkPreviewAction = NativeLinkPreviewAction as jest.MockedFunction<
-  typeof NativeLinkPreviewAction
->;
+const { NativeLinkPreviewActionWithImageSupport } = jest.requireMock(
+  '../../../link/preview/NativeLinkPreviewActionWithImageSupport'
+) as typeof import('../../../link/preview/NativeLinkPreviewActionWithImageSupport');
+const MockedNativeLinkPreviewActionWithImageSupport =
+  NativeLinkPreviewActionWithImageSupport as jest.MockedFunction<
+    typeof NativeLinkPreviewActionWithImageSupport
+  >;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -480,7 +485,7 @@ describe('StackToolbarMenu component', () => {
     }
   );
 
-  it('renders NativeLinkPreviewAction in bottom placement', () => {
+  it('renders NativeLinkPreviewActionWithImageSupport in bottom placement', () => {
     render(
       <ToolbarPlacementContext.Provider value="bottom">
         <StackToolbarMenu icon="ellipsis.circle">
@@ -489,11 +494,29 @@ describe('StackToolbarMenu component', () => {
       </ToolbarPlacementContext.Provider>
     );
 
-    expect(screen.getByTestId('NativeLinkPreviewAction')).toBeVisible();
-    expect(MockedNativeLinkPreviewAction).toHaveBeenCalled();
+    expect(screen.getByTestId('NativeLinkPreviewActionWithImageSupport')).toBeVisible();
+    expect(MockedNativeLinkPreviewActionWithImageSupport).toHaveBeenCalled();
   });
 
-  it('passes icon to NativeLinkPreviewAction', () => {
+  it('passes xcassetName to NativeLinkPreviewActionWithImageSupport when xcasset icon is used', () => {
+    render(
+      <ToolbarPlacementContext.Provider value="bottom">
+        <StackToolbarMenu>
+          <StackToolbarIcon xcasset="custom-icon" />
+          <StackToolbarMenuAction onPress={() => {}}>Action</StackToolbarMenuAction>
+        </StackToolbarMenu>
+      </ToolbarPlacementContext.Provider>
+    );
+
+    expect(MockedNativeLinkPreviewActionWithImageSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        xcassetName: 'custom-icon',
+      }),
+      undefined
+    );
+  });
+
+  it('passes icon to NativeLinkPreviewActionWithImageSupport', () => {
     render(
       <ToolbarPlacementContext.Provider value="bottom">
         <StackToolbarMenu icon="ellipsis.circle">
@@ -502,7 +525,7 @@ describe('StackToolbarMenu component', () => {
       </ToolbarPlacementContext.Provider>
     );
 
-    expect(MockedNativeLinkPreviewAction).toHaveBeenCalledWith(
+    expect(MockedNativeLinkPreviewActionWithImageSupport).toHaveBeenCalledWith(
       expect.objectContaining({
         icon: 'ellipsis.circle',
       }),
@@ -520,7 +543,7 @@ describe('StackToolbarMenu component', () => {
       </ToolbarPlacementContext.Provider>
     );
 
-    expect(MockedNativeLinkPreviewAction).toHaveBeenCalledWith(
+    expect(MockedNativeLinkPreviewActionWithImageSupport).toHaveBeenCalledWith(
       expect.objectContaining({
         label: 'Button Label',
         title: 'Menu Title',
@@ -615,5 +638,100 @@ describe('StackToolbarMenuAction component', () => {
     );
 
     expect(screen.getByTestId('LinkMenuAction')).toBeVisible();
+  });
+
+  describe('imageSource support', () => {
+    const { useImage } = jest.requireMock('expo-image') as { useImage: jest.Mock };
+
+    it('calls useImage when icon is ImageSourcePropType', () => {
+      const imageSource = { uri: 'https://example.com/icon.png' };
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarMenuAction icon={imageSource} onPress={() => {}}>
+            Action
+          </StackToolbarMenuAction>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(useImage).toHaveBeenCalledWith(imageSource);
+    });
+
+    it('does not call useImage for SF Symbol icon', () => {
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarMenuAction icon="star.fill" onPress={() => {}}>
+            Action
+          </StackToolbarMenuAction>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(useImage).not.toHaveBeenCalled();
+    });
+
+    it('does not call useImage when no icon', () => {
+      render(
+        <ToolbarPlacementContext.Provider value="bottom">
+          <StackToolbarMenuAction onPress={() => {}}>Action</StackToolbarMenuAction>
+        </ToolbarPlacementContext.Provider>
+      );
+
+      expect(useImage).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('StackToolbarMenu imageSource support', () => {
+  it('passes imageSource to NativeLinkPreviewActionWithImageSupport when icon is ImageSourcePropType', () => {
+    const imageSource = { uri: 'https://example.com/icon.png' };
+    render(
+      <ToolbarPlacementContext.Provider value="bottom">
+        <StackToolbarMenu icon={imageSource}>
+          <StackToolbarMenuAction onPress={() => {}}>Action</StackToolbarMenuAction>
+        </StackToolbarMenu>
+      </ToolbarPlacementContext.Provider>
+    );
+
+    expect(MockedNativeLinkPreviewActionWithImageSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageSource,
+      }),
+      undefined
+    );
+  });
+
+  it('passes imageSource from Icon child with src to NativeLinkPreviewActionWithImageSupport', () => {
+    const source = { uri: 'https://example.com/icon.png' };
+    render(
+      <ToolbarPlacementContext.Provider value="bottom">
+        <StackToolbarMenu>
+          <StackToolbarIcon src={source} />
+          <StackToolbarMenuAction onPress={() => {}}>Action</StackToolbarMenuAction>
+        </StackToolbarMenu>
+      </ToolbarPlacementContext.Provider>
+    );
+
+    expect(MockedNativeLinkPreviewActionWithImageSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageSource: source,
+      }),
+      undefined
+    );
+  });
+
+  it('does not pass imageSource for SF Symbol icon', () => {
+    render(
+      <ToolbarPlacementContext.Provider value="bottom">
+        <StackToolbarMenu icon="ellipsis.circle">
+          <StackToolbarMenuAction onPress={() => {}}>Action</StackToolbarMenuAction>
+        </StackToolbarMenu>
+      </ToolbarPlacementContext.Provider>
+    );
+
+    expect(MockedNativeLinkPreviewActionWithImageSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageSource: undefined,
+      }),
+      undefined
+    );
   });
 });
