@@ -361,6 +361,8 @@ static NSString * const kSnackRuntimeProjectId = @"933fd9c0-1666-11e7-afca-d9807
 
 - (void)_loadEmbeddedSnackRuntime
 {
+  _shouldShowRemoteUpdateStatus = NO;
+
   // Load the embedded manifest.json
   NSString *manifestPath = [[NSBundle mainBundle] pathForResource:@"manifest" ofType:@"json" inDirectory:@"SnackRuntime"];
   if (!manifestPath) {
