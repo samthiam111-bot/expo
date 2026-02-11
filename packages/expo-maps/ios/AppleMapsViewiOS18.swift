@@ -281,7 +281,7 @@ struct AppleMapsViewiOS18: View, AppleMapsViewProtocol {
     let threshold = props.properties.polylineTapThreshold
 
     return props.polylines.first { line in
-      let pts = line.clLocationCoordinates2D.map(MKMapPoint.init)
+      let pts = line.hitTestCoordinates.map(MKMapPoint.init)
 
       var minDist = CLLocationDistance.greatestFiniteMagnitude
       for (a, b) in zip(pts, pts.dropFirst()) {
