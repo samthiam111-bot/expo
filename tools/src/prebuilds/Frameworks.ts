@@ -116,6 +116,15 @@ export const Frameworks = {
     // Remove the toplevel Headers directory as it's no longer needed
     await fs.remove(path.join(xcframeworkOutputPath, 'Headers'));
 
+    // Copy resource bundles into each xcframework slice (if any targets have resources)
+    await copyResourceBundlesIntoXCFrameworkAsync(
+      pkg,
+      product,
+      buildType,
+      slices,
+      xcframeworkOutputPath
+    );
+
     // Sign the XCFramework if a signing identity is provided
     if (signing?.identity) {
       signXCFramework(xcframeworkOutputPath, signing.identity, signing.useTimestamp ?? true);
@@ -266,6 +275,77 @@ const processXCFrameworkSlices = async (
       submoduleNames
     );
   }
+};
+
+/**
+ * Copies resource bundles from SPM build output into each xcframework slice.
+ * SPM produces resource bundles named {packageName}_{targetName}.bundle in the
+ * build output directory. These need to be placed alongside the .framework in
+ * each slice of the xcframework so consumers can find them.
+ *
+ * @param pkg Package information
+ * @param product SPM product
+ * @param buildType Build flavor (Debug or Release)
+ * @param slices Array of slice names in the xcframework
+ * @param xcframeworkOutputPath Path to the xcframework
+ */
+const copyResourceBundlesIntoXCFrameworkAsync = async (
+  pkg: SPMPackageSource,
+  product: SPMProduct,
+  buildType: BuildFlavor,
+  slices: string[],
+  xcframeworkOutputPath: string
+): Promise<void> => {
+  // Find targets that have resources
+  const targetsWithResources = product.targets.filter(
+    (t) => t.type !== 'framework' && t.resources && t.resources.length > 0
+  );
+
+  if (targetsWithResources.length === 0) {
+    return;
+  }
+
+  const spinner = createAsyncSpinner(`Copying resource bundles`, pkg, product);
+
+  for (const target of targetsWithResources) {
+    // SPM names the resource bundle as {packageName}_{targetName}.bundle
+    const bundleName = `${pkg.packageName}_${target.name}.bundle`;
+
+    for (const slice of slices) {
+      // Map slice name to build folder prefix (e.g., 'ios-arm64' -> 'iphoneos')
+      const buildFolderPrefix = getBuildFolderPrefixForSlice(slice);
+      if (!buildFolderPrefix) {
+        spinner.warn(`Unknown slice ${slice} — skipping resource bundle copy`);
+        continue;
+      }
+
+      // Find the bundle in the SPM build output
+      const buildOutputPath = path.join(
+        SPMBuild.getPackageBuildPath(pkg, product),
+        'Build',
+        'Products',
+        `${buildType}-${buildFolderPrefix}`,
+        bundleName
+      );
+
+      if (!(await fs.pathExists(buildOutputPath))) {
+        spinner.warn(
+          `Resource bundle not found at ${path.relative(pkg.path, buildOutputPath)} for slice ${slice}`
+        );
+        continue;
+      }
+
+      // Copy bundle into the xcframework slice (alongside the .framework)
+      const destBundlePath = path.join(xcframeworkOutputPath, slice, bundleName);
+      await fs.copy(buildOutputPath, destBundlePath, { overwrite: true });
+
+      spinner.info(
+        `Copied resource bundle ${chalk.cyan(bundleName)} → ${chalk.cyan(slice + '/' + bundleName)}`
+      );
+    }
+  }
+
+  spinner.succeed(`Copied resource bundles for ${product.name}`);
 };
 
 /**
@@ -779,8 +859,6 @@ const copySwiftModuleInterfacesAsync = async (
   const swiftTarget = product.targets.find((target) => target?.type === 'swift');
 
   if (!swiftTarget) {
-    // No Swift target in this product, nothing to copy
-    spinner.warn(`No Swift target in ${product.name}, skipping Swift module copy`);
     return;
   }
 

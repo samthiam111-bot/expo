@@ -73,7 +73,10 @@
                         "LottieReactNative_codegen_components"
                     ],
                     "includeDirectories": [ "../../.build/codegen/build/generated/ios/ReactCodegen" ],
-                    "linkedFrameworks": [ "UIKit", "Foundation" ]
+                    "linkedFrameworks": [ "UIKit", "Foundation" ],
+                    "resources": [
+                        { "path": "ios/PrivacyInfo.xcprivacy", "rule": "copy" }
+                    ]
                 }
             ]
         }

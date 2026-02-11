@@ -6,6 +6,7 @@
  */
 
 import fs from 'fs-extra';
+import { glob } from 'glob';
 import path from 'path';
 
 import type { SPMPackageSource } from './ExternalPackage';
@@ -506,7 +507,7 @@ function generateTargetDeclaration(target: ResolvedTarget, comma: string): strin
  * @param artifactPaths - Optional artifact paths from centralized cache
  * @param spmProductToPackage - Map of SPM product names to their package names
  */
-function resolveSourceTarget(
+async function resolveSourceTarget(
   target: ObjcTarget | SwiftTarget | CppTarget,
   pkg: SPMPackageSource,
   productName: string,
@@ -516,7 +517,7 @@ function resolveSourceTarget(
   buildType: BuildFlavor,
   artifactPaths?: ArtifactPaths,
   spmProductToPackage?: Map<string, string>
-): ResolvedTarget {
+): Promise<ResolvedTarget> {
   // Get directory of Package.swift and create the target
   const packageSwiftDir = path.dirname(packageSwiftPath);
 
@@ -586,12 +587,26 @@ function resolveSourceTarget(
     resolved.linkerSettings.push(`.unsafeFlags([${quotedFlags}])`);
   }
 
-  // Pass through resources if defined
+  // Resolve resources: expand globs against package root and remap paths
+  // to the copied location in the generated target folder (resources/ subdirectory)
   if (target.resources && target.resources.length > 0) {
-    resolved.resources = target.resources.map((r) => ({
-      path: r.path,
-      rule: r.rule || 'process',
-    }));
+    const resolvedResources: { path: string; rule: 'process' | 'copy' }[] = [];
+    for (const r of target.resources) {
+      const matchedFiles = await glob(r.path, { cwd: pkg.path });
+      if (matchedFiles.length === 0) {
+        throw new Error(
+          `Resource not found: "${r.path}" (resolved from package root: ${pkg.path}). ` +
+            `No files matched this path or glob pattern.`
+        );
+      }
+      for (const file of matchedFiles) {
+        resolvedResources.push({
+          path: `resources/${path.basename(file)}`,
+          rule: r.rule || 'process',
+        });
+      }
+    }
+    resolved.resources = resolvedResources;
   }
 
   return resolved;
@@ -1029,7 +1044,7 @@ async function buildPackageSwiftContext(
 
     spinner.info(`Resolving target: ${target.name}`);
 
-    const resolved = resolveSourceTarget(
+    const resolved = await resolveSourceTarget(
       target,
       pkg,
       product.name,

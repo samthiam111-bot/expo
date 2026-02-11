@@ -131,6 +131,55 @@ export const SPMVerify = {
           )
         );
       }
+
+      // Verify resource bundles if the product has targets with resources
+      const targetsWithResources = product.targets.filter(
+        (t) => t.type !== 'framework' && t.resources && t.resources.length > 0
+      );
+
+      if (targetsWithResources.length > 0) {
+        const xcframeworkPath = Frameworks.getFrameworkPath(pkg.path, product.name, buildFlavor);
+
+        // Find all slices in the xcframework
+        const sliceNames = (await fs.readdir(xcframeworkPath)).filter((name) => {
+          const fullPath = path.join(xcframeworkPath, name);
+          return fs.statSync(fullPath).isDirectory() && name !== 'Info.plist';
+        });
+
+        let allBundlesFound = true;
+
+        for (const target of targetsWithResources) {
+          const bundleName = `${pkg.packageName}_${target.name}.bundle`;
+
+          const missingSlices: string[] = [];
+          const foundSlices: string[] = [];
+
+          for (const slice of sliceNames) {
+            const bundlePath = path.join(xcframeworkPath, slice, bundleName);
+            if (await fs.pathExists(bundlePath)) {
+              foundSlices.push(slice);
+            } else {
+              missingSlices.push(slice);
+              allBundlesFound = false;
+            }
+          }
+
+          if (missingSlices.length > 0) {
+            logger.error(
+              `  ${chalk.red('✗')} Resource bundle ${chalk.cyan(bundleName)} missing from slices: ${missingSlices.join(', ')}`
+            );
+          } else {
+            logger.info(
+              `  ${chalk.green('✓')} Resource bundle ${chalk.cyan(bundleName)} present in all slices (${foundSlices.join(', ')})`
+            );
+          }
+        }
+
+        if (!allBundlesFound) {
+          // Update the report to reflect resource bundle failure
+          report.overallSuccess = false;
+        }
+      }
     } catch (error) {
       logger.error(
         `  ${chalk.red('✗')} Verification failed for ${chalk.green(product.name)}.xcframework: ${error instanceof Error ? error.message : String(error)}`

@@ -534,7 +534,7 @@
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path or glob pattern to the resource(s) relative to the target path"
+                    "description": "Path or glob pattern to the resource(s) relative to the package root"
                 },
                 "rule": {
                     "type": "string",

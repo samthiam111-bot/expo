@@ -49,6 +49,9 @@
           "linkedFrameworks": [
             "Foundation",
             "UIKit"
+          ],
+          "resources": [
+            { "path": "ios/PrivacyInfo.xcprivacy", "rule": "copy" }
           ]
         }
       ]

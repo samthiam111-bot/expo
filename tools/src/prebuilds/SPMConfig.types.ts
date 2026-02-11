@@ -25,7 +25,7 @@ export interface FrameworkTarget {
  * A resource to include in the target bundle
  */
 export interface TargetResource {
-  /** Path or glob pattern to the resource(s) relative to the target path */
+  /** Path or glob pattern to the resource(s) relative to the package root */
   path: string;
   /** How to handle the resource: 'process' optimizes for platform, 'copy' includes as-is */
   rule?: 'process' | 'copy';

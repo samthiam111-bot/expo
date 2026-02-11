@@ -32,6 +32,9 @@
             "Foundation",
             "UIKit",
             "UserNotifications"
+          ],
+          "resources": [
+            { "path": "ios/PrivacyInfo.xcprivacy", "rule": "copy" }
           ]
         }
       ]

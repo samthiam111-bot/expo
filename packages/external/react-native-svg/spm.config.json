@@ -73,7 +73,7 @@
                     "linkedFrameworks": [ "Foundation", "UIKit", "CoreGraphics", "QuartzCore", "CoreText", "CoreImage", "Metal" ],
                     "compilerFlags": [ "-include", "Foundation/Foundation.h" ],
                     "resources": [
-                        { "path": "Filters/MetalCI/*.iphoneos.metallib", "rule": "copy" }
+                        { "path": "apple/Filters/MetalCI/*.iphoneos.metallib", "rule": "copy" }
                     ]
                 }
             ]

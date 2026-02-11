@@ -308,6 +308,40 @@ ${allImports.join('\n')}
           }
         }
       }
+
+      // Copy resources into the generated target folder
+      // Resource paths in spm-config.json are relative to the package root (pkg.path)
+      if (target.resources && target.resources.length > 0) {
+        const resourcesDestination = path.join(targetDestination, 'resources');
+        await fs.ensureDir(resourcesDestination);
+
+        for (const resource of target.resources) {
+          // Glob-expand the resource path against the package root
+          const matchedFiles = await glob(resource.path, { cwd: pkg.path });
+
+          if (matchedFiles.length === 0) {
+            throw new Error(
+              `Resource not found: "${resource.path}" (resolved from package root: ${pkg.path}). ` +
+                `No files matched this path or glob pattern. ` +
+                `Check that the resource path in spm-config.json is correct and relative to the package root.`
+            );
+          }
+
+          for (const file of matchedFiles) {
+            const sourceFilePath = path.join(pkg.path, file);
+            const destinationFilePath = path.join(resourcesDestination, path.basename(file));
+
+            // Only copy if content changed (preserves mtime for Xcode incremental builds)
+            if (hasFileContentChanged(sourceFilePath, destinationFilePath)) {
+              spinner.info(
+                `Copying resource ${chalk.cyan(file)} → ${chalk.cyan(path.relative(targetDestination, destinationFilePath))}...`
+              );
+              await fs.copy(sourceFilePath, destinationFilePath, { overwrite: true });
+            }
+          }
+        }
+      }
+
       spinner.succeed(`Generated source folder structure for target ${chalk.green(target.name)}.`);
     }
   },
