@@ -357,20 +357,7 @@ struct CodeFileView: View {
         if !isImageFile {
           Button(isEditing ? "Done" : "Edit") {
             if isEditing {
-              isEditing = false
-
-              // If content changed and we have an active Snack session, send the update
-              if displayContent != originalContent && SourceMapService.hasActiveSnackSession {
-                _ = SourceMapService.sendSnackFileUpdate(
-                  path: node.path,
-                  oldContents: originalContent,
-                  newContents: displayContent
-                )
-              }
-
-              Task {
-                highlightedLines = await SyntaxHighlighter.highlightLines(lines, theme: theme)
-              }
+              finishEditing()
             } else {
               isEditing = true
             }
@@ -390,8 +377,32 @@ struct CodeFileView: View {
         displayContent = originalContent
       }
     }
+    .onDisappear {
+      if isEditing {
+        finishEditing(rehighlight: false)
+      }
+    }
     .task(id: colorScheme) {
       if !isImageFile {
+        highlightedLines = await SyntaxHighlighter.highlightLines(lines, theme: theme)
+      }
+    }
+  }
+
+  private func finishEditing(rehighlight: Bool = true) {
+    isEditing = false
+
+    // If content changed and we have an active Snack session, send the update
+    if displayContent != originalContent && SourceMapService.hasActiveSnackSession {
+      _ = SourceMapService.sendSnackFileUpdate(
+        path: node.path,
+        oldContents: originalContent,
+        newContents: displayContent
+      )
+    }
+
+    if rehighlight {
+      Task {
         highlightedLines = await SyntaxHighlighter.highlightLines(lines, theme: theme)
       }
     }
