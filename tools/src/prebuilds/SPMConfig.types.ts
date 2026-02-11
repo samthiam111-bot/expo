@@ -15,8 +15,6 @@ export interface FrameworkTarget {
   path: string;
   /** Header locations within the framework bundle */
   includeDirectories?: string[];
-  /** Path to a header map file (.hmap) for header resolution */
-  headerMapPath?: string;
   /** Path to a VFS overlay file (.yaml) for virtual filesystem mapping */
   vfsOverlayPath?: string;
   /** System frameworks to link */

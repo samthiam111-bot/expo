@@ -81,7 +81,6 @@ Common options available for all source targets (`objc`, `swift`, `cpp`):
 
 
 Framework targets support:
-- \`headerMapPath\` - Path to a header map file (\`.hmap\`)
 - \`vfsOverlayPath\` - Path to a VFS overlay file (\`.yaml\`)
 
 ### External Dependencies

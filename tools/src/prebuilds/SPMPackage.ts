@@ -230,7 +230,6 @@ const ARTIFACT_RELATIVE_PATHS: Record<
   {
     xcframeworkPath: string;
     includeDirectories: string[];
-    headerMapFile?: string;
     vfsOverlayFile?: string;
   }
 > = {
@@ -241,7 +240,6 @@ const ARTIFACT_RELATIVE_PATHS: Record<
   react: {
     xcframeworkPath: 'React.xcframework',
     includeDirectories: ['Headers', 'React_Core'],
-    headerMapFile: 'React-Headers.hmap',
     vfsOverlayFile: 'React-VFS.yaml',
   },
   reactnativedependencies: {
@@ -301,10 +299,6 @@ function getExternalDependencyConfig(
       name: 'React',
       path: relativePath,
       includeDirectories: ARTIFACT_RELATIVE_PATHS.react.includeDirectories,
-      // Header map and VFS overlay paths - relative to artifactBasePath
-      headerMapPath: ARTIFACT_RELATIVE_PATHS.react.headerMapFile
-        ? path.join(artifactBasePath, ARTIFACT_RELATIVE_PATHS.react.headerMapFile)
-        : undefined,
       vfsOverlayPath: ARTIFACT_RELATIVE_PATHS.react.vfsOverlayFile
         ? path.join(artifactBasePath, ARTIFACT_RELATIVE_PATHS.react.vfsOverlayFile)
         : undefined,
@@ -856,11 +850,6 @@ function collectVfsAndHeaderMapFlags(
           const includePath = path.resolve(xcframeworkAbsPath, includeDir);
           flags.push('-I', includePath);
         }
-      }
-
-      // Add header map if present (already absolute path)
-      if (config.headerMapPath) {
-        flags.push('-I', config.headerMapPath);
       }
     }
   }

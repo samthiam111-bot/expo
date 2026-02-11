@@ -253,10 +253,6 @@
                     "description": "Header locations within the framework bundle",
                     "default": [ ]
                 },
-                "headerMapPath": {
-                    "type": "string",
-                    "description": "Path to a header map file (.hmap) for header resolution"
-                },
                 "vfsOverlayPath": {
                     "type": "string",
                     "description": "Path to a VFS overlay file (.yaml) for virtual filesystem mapping"
