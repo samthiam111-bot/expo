@@ -17,6 +17,7 @@ import type {
   VerifyOptions,
 } from './SPMVerify.types';
 import { AsyncSpinner, createAsyncSpinner } from './Utils';
+import { verifyDsymPresence, verifyDsymUuidMatch, verifyDsymDebugPrefixMapping } from './dSYM';
 
 export const SPMVerify = {
   /**
@@ -70,6 +71,15 @@ export const SPMVerify = {
           if (!slice.swiftInterfaceTypecheck.success) {
             failures.push(`Swift typecheck failed (${slice.sliceId})`);
           }
+          if (!slice.dsymPresent.success) {
+            failures.push(`dSYM missing (${slice.sliceId})`);
+          }
+          if (!slice.dsymUuidMatch.success) {
+            failures.push(`dSYM UUID mismatch (${slice.sliceId})`);
+          }
+          if (!slice.dsymDebugPrefixMapping.success) {
+            failures.push(`dSYM bad paths (${slice.sliceId})`);
+          }
         }
 
         logger.error(
@@ -114,6 +124,30 @@ export const SPMVerify = {
               )
             );
           }
+          if (!slice.dsymDebugPrefixMapping.success && slice.dsymDebugPrefixMapping.details) {
+            logger.log(chalk.gray(`      dSYM debug prefix error (${slice.sliceId}):`));
+            logger.log(
+              chalk.gray(
+                slice.dsymDebugPrefixMapping.details
+                  .split('\n')
+                  .slice(0, 10)
+                  .map((l) => `        ${l}`)
+                  .join('\n')
+              )
+            );
+          }
+          if (!slice.dsymUuidMatch.success && slice.dsymUuidMatch.details) {
+            logger.log(chalk.gray(`      dSYM UUID mismatch (${slice.sliceId}):`));
+            logger.log(
+              chalk.gray(
+                slice.dsymUuidMatch.details
+                  .split('\n')
+                  .slice(0, 10)
+                  .map((l) => `        ${l}`)
+                  .join('\n')
+              )
+            );
+          }
         }
       }
 
@@ -128,6 +162,44 @@ export const SPMVerify = {
         logger.log(
           chalk.gray(
             '      Headers may import React types not available during standalone verification'
+          )
+        );
+      }
+
+      // Show dSYM issues as warnings — they don't prevent the framework from working,
+      // but they affect source-level debugging
+      const dsymMissing = report.slices.filter((s) => !s.dsymPresent.success);
+      const dsymUuidIssues = report.slices.filter(
+        (s) => s.dsymPresent.success && !s.dsymUuidMatch.success
+      );
+      const dsymPathIssues = report.slices.filter(
+        (s) => s.dsymPresent.success && !s.dsymDebugPrefixMapping.success
+      );
+
+      if (dsymMissing.length > 0) {
+        const sliceIds = dsymMissing.map((s) => s.sliceId).join(', ');
+        logger.warn(
+          `  ${chalk.yellow('⚠')} dSYM missing for ${chalk.green(product.name)}.xcframework (${sliceIds})`
+        );
+        logger.log(chalk.gray('      Source-level debugging will not work for these slices'));
+      }
+
+      if (dsymUuidIssues.length > 0) {
+        const sliceIds = dsymUuidIssues.map((s) => s.sliceId).join(', ');
+        logger.warn(
+          `  ${chalk.yellow('⚠')} dSYM UUID mismatch for ${chalk.green(product.name)}.xcframework (${sliceIds})`
+        );
+        logger.log(chalk.gray('      dSYMs may be stale — rebuild to regenerate matching symbols'));
+      }
+
+      if (dsymPathIssues.length > 0) {
+        const sliceIds = dsymPathIssues.map((s) => s.sliceId).join(', ');
+        logger.warn(
+          `  ${chalk.yellow('⚠')} dSYM debug prefix mapping issue for ${chalk.green(product.name)}.xcframework (${sliceIds})`
+        );
+        logger.log(
+          chalk.gray(
+            '      DWARF source paths contain absolute paths that should have been remapped to /expo-src/'
           )
         );
       }
@@ -1188,10 +1260,14 @@ const verifyAsync = async (
     throw new Error(`No .framework slices found inside: ${xcframeworkPath}`);
   }
 
+  // Compute the dSYMs base path for dSYM verification
+  const dsymsBasePath = Frameworks.getDsymsPath(pkg.path, product.name, buildFlavor);
+
   const sliceReports = await verifyAllSlices(
     pkg,
     slices,
     xcframeworkPath,
+    dsymsBasePath,
     options,
     dependencyXcframeworkPaths
   );
@@ -1276,6 +1352,7 @@ const verifyAllSlices = async (
   pkg: SPMPackageSource,
   slices: XCFrameworkSlice[],
   xcframeworkPath: string,
+  dsymsBasePath: string,
   options?: VerifyOptions,
   dependencyXcframeworkPaths: string[] = []
 ): Promise<SliceVerificationReport[]> => {
@@ -1287,6 +1364,7 @@ const verifyAllSlices = async (
     const report = await verifySlice(
       slice,
       xcframeworkPath,
+      dsymsBasePath,
       spinner,
       options,
       dependencyXcframeworkPaths
@@ -1317,6 +1395,9 @@ const collectSliceIssues = (report: SliceVerificationReport): string[] => {
   if (!report.modularHeadersValid.success) issues.push('non-modular-headers');
   if (!report.clangModuleImport.success) issues.push('clang');
   if (!report.swiftInterfaceTypecheck.success) issues.push('swift');
+  if (!report.dsymPresent.success) issues.push('dsym-missing');
+  if (!report.dsymUuidMatch.success) issues.push('dsym-uuid-mismatch');
+  if (!report.dsymDebugPrefixMapping.success) issues.push('dsym-bad-paths');
 
   return issues;
 };
@@ -1327,6 +1408,7 @@ const collectSliceIssues = (report: SliceVerificationReport): string[] => {
 const verifySlice = async (
   slice: XCFrameworkSlice,
   xcframeworkPath: string,
+  dsymsBasePath: string,
   spinner: AsyncSpinner,
   options?: VerifyOptions,
   dependencyXcframeworkPaths: string[] = []
@@ -1374,6 +1456,21 @@ const verifySlice = async (
     swiftInterfaceTypecheck = await verifySwiftInterfaceTypecheck(slice);
   }
 
+  // dSYM verification: presence, UUID match, and debug prefix mapping
+  let dsymPresent: VerificationResult = { success: true, message: 'Skipped' };
+  let dsymUuidMatch: VerificationResult = { success: true, message: 'Skipped' };
+  let dsymDebugPrefixMapping: VerificationResult = { success: true, message: 'Skipped' };
+
+  if (!options?.skipDsymCheck) {
+    spinner.info('Verifying dSYM...');
+    dsymPresent = verifyDsymPresence(dsymsBasePath, slice);
+
+    if (dsymPresent.success) {
+      dsymUuidMatch = verifyDsymUuidMatch(dsymsBasePath, slice);
+      dsymDebugPrefixMapping = verifyDsymDebugPrefixMapping(dsymsBasePath, slice);
+    }
+  }
+
   return {
     sliceId: slice.sliceId,
     frameworkName: slice.frameworkName,
@@ -1386,5 +1483,8 @@ const verifySlice = async (
     modularHeadersValid,
     clangModuleImport,
     swiftInterfaceTypecheck,
+    dsymPresent,
+    dsymUuidMatch,
+    dsymDebugPrefixMapping,
   };
 };

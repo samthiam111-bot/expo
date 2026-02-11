@@ -7,6 +7,7 @@ import { BuildFlavor } from './Prebuilder.types';
 import { BuildPlatform, ProductPlatform, SPMProduct } from './SPMConfig.types';
 import { SPMGenerator } from './SPMGenerator';
 import { spawnXcodeBuildWithSpinner } from './XCodeRunner';
+import { getExpoRepositoryRootDir } from '../Directories';
 import logger from '../Logger';
 
 export const SPMBuild = {
@@ -175,6 +176,16 @@ const buildXcodeBuildArgs = (
   const derivedDataPath = SPMBuild.getPackageBuildPath(pkg, product);
   const containsSwiftTargets = product.targets.some((target) => target?.type === 'swift');
 
+  // Remap absolute build paths to a canonical /expo-src prefix in DWARF debug info.
+  // This ensures dSYMs are portable across machines — the canonical prefix is resolved
+  // to the consumer's local package path at pod install time via UUID plists.
+  // Two separate flags are needed for Swift targets:
+  //   -debug-prefix-map: remaps paths in Swift's own DWARF output
+  //   -Xcc -fdebug-prefix-map: remaps paths in Clang calls made by Swift (bridging headers, etc.)
+  const repoRoot = getExpoRepositoryRootDir();
+  const debugPrefixMap = `-fdebug-prefix-map=${repoRoot}=/expo-src`;
+  const swiftDebugPrefixMap = `-debug-prefix-map ${repoRoot}=/expo-src`;
+
   return [
     '-scheme',
     pkg.packageName,
@@ -187,6 +198,11 @@ const buildXcodeBuildArgs = (
     'SKIP_INSTALL=NO',
     ...(containsSwiftTargets ? ['BUILD_LIBRARY_FOR_DISTRIBUTION=YES'] : []),
     'DEBUG_INFORMATION_FORMAT=dwarf-with-dsym',
+    `OTHER_CFLAGS=$(inherited) ${debugPrefixMap}`,
+    `OTHER_CPLUSPLUSFLAGS=$(inherited) ${debugPrefixMap}`,
+    ...(containsSwiftTargets
+      ? [`OTHER_SWIFT_FLAGS=$(inherited) ${swiftDebugPrefixMap} -Xcc ${debugPrefixMap}`]
+      : []),
     'build',
   ];
 };

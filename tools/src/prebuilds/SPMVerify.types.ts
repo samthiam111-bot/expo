@@ -46,6 +46,12 @@ export interface SliceVerificationReport {
   modularHeadersValid: VerificationResult;
   clangModuleImport: VerificationResult;
   swiftInterfaceTypecheck: VerificationResult;
+  /** Whether a matching dSYM bundle exists for this slice */
+  dsymPresent: VerificationResult;
+  /** Whether dSYM UUIDs match the framework binary UUIDs */
+  dsymUuidMatch: VerificationResult;
+  /** Whether DWARF source paths use the canonical /expo-src/ prefix (no absolute CI paths) */
+  dsymDebugPrefixMapping: VerificationResult;
 }
 
 /**
@@ -58,6 +64,8 @@ export interface VerifyOptions {
   skipClangCheck?: boolean;
   /** Skip swift interface typecheck */
   skipSwiftCheck?: boolean;
+  /** Skip dSYM verification (presence, UUID match, debug prefix mapping) */
+  skipDsymCheck?: boolean;
   /** Show detailed error messages */
   verbose?: boolean;
 }
