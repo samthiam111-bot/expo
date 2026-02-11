@@ -239,7 +239,6 @@ struct CodeFileView: View {
   @State private var isEditing = false
   @State private var displayContent: String = ""
   @State private var showCopiedConfirmation = false
-  @AppStorage("EXDevMenuSourceExplorerWrapLines") private var wrapLines = true
   @AppStorage("EXDevMenuSourceExplorerFontSize") private var fontSize: Double = 12
 
   private var isImageFile: Bool {
@@ -284,17 +283,6 @@ struct CodeFileView: View {
           .frame(maxWidth: .infinity)
       }
       #endif
-
-      Divider().frame(height: 24)
-
-      // Wrap lines button
-      Button {
-        wrapLines.toggle()
-      } label: {
-        Label(wrapLines ? "Unwrap" : "Wrap", systemImage: wrapLines ? "arrow.left.and.right.text.vertical" : "text.justify.leading")
-          .font(.system(size: 14))
-          .frame(maxWidth: .infinity)
-      }
 
       Divider().frame(height: 24)
 
@@ -442,7 +430,6 @@ struct CodeFileView: View {
       text: $displayContent,
       font: .monospacedSystemFont(ofSize: CGFloat(fontSize), weight: .regular),
       theme: theme,
-      wrapLines: wrapLines,
       isEditable: isEditing
     )
     #else
@@ -456,15 +443,8 @@ struct CodeFileView: View {
         .foregroundColor(theme.plain)
     } else {
       ScrollView(.vertical, showsIndicators: false) {
-        if wrapLines {
-          CodeColumn(lines: lines, highlightedLines: highlightedLines, theme: theme, fontSize: CGFloat(fontSize), wrapLines: true)
-            .padding(.horizontal, 16)
-        } else {
-          ScrollView(.horizontal, showsIndicators: false) {
-            CodeColumn(lines: lines, highlightedLines: highlightedLines, theme: theme, fontSize: CGFloat(fontSize), wrapLines: false)
-              .padding(.horizontal, 16)
-          }
-        }
+        CodeColumn(lines: lines, highlightedLines: highlightedLines, theme: theme, fontSize: CGFloat(fontSize))
+          .padding(.horizontal, 16)
       }
     }
     #endif
@@ -490,7 +470,6 @@ struct CodeColumn: View {
   let highlightedLines: [AttributedString]?
   let theme: SyntaxHighlighter.Theme
   var fontSize: CGFloat = 13
-  var wrapLines: Bool = true
 
   private var lineHeight: CGFloat {
     fontSize * 1.5
@@ -518,11 +497,7 @@ struct CodeColumn: View {
       }
     }
 
-    if wrapLines {
-      content
-    } else {
-      content.fixedSize(horizontal: true, vertical: false)
-    }
+    content
   }
 }
 
@@ -641,7 +616,6 @@ struct CodeTextEditor: UIViewRepresentable {
   @Binding var text: String
   var font: UIFont
   var theme: SyntaxHighlighter.Theme
-  var wrapLines: Bool
   var isEditable: Bool
 
   func makeUIView(context: Context) -> UITextView {
@@ -664,7 +638,6 @@ struct CodeTextEditor: UIViewRepresentable {
     textView.textContainer.lineFragmentPadding = 0  // Remove default 5pt padding
 
     // Initialize coordinator tracking state
-    context.coordinator.lastWrapLines = wrapLines
     context.coordinator.lastFontSize = font.pointSize
 
     // Configure line wrapping
@@ -690,12 +663,10 @@ struct CodeTextEditor: UIViewRepresentable {
 
     // Check what changed
     let fontChanged = coordinator.lastFontSize != font.pointSize
-    let wrapChanged = coordinator.lastWrapLines != wrapLines
     let textChanged = textView.text != text
 
     // Update tracking
     coordinator.lastFontSize = font.pointSize
-    coordinator.lastWrapLines = wrapLines
 
     // Update text if needed
     if textChanged {
@@ -703,7 +674,7 @@ struct CodeTextEditor: UIViewRepresentable {
     }
 
     // Re-apply highlighting if text, font, or wrap changed
-    if textChanged || fontChanged || wrapChanged {
+    if textChanged || fontChanged {
       let selectedRange = textView.selectedRange
       applyHighlighting(to: textView)
       // Restore cursor position if still valid
@@ -734,37 +705,9 @@ struct CodeTextEditor: UIViewRepresentable {
   }
 
   private func configureWrapping(for textView: UITextView) {
-    if wrapLines {
-      // Wrap lines - text container tracks text view width
-      textView.textContainer.lineBreakMode = .byWordWrapping
-      textView.textContainer.widthTracksTextView = true
-      textView.textContainer.size.height = CGFloat.greatestFiniteMagnitude
-    } else {
-      // No wrap - allow horizontal scrolling
-      textView.textContainer.lineBreakMode = .byClipping
-      textView.textContainer.widthTracksTextView = false
-      textView.textContainer.size = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-    }
-
-    // Force complete layout invalidation
-    let length = (textView.text as NSString?)?.length ?? 0
-    if length > 0 {
-      textView.layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: length), actualCharacterRange: nil)
-    }
-    textView.setNeedsLayout()
-    textView.layoutIfNeeded()
-
-    // UITextView doesn't automatically update contentSize for horizontal scrolling —
-    // manually compute it from the laid-out text rect
-    if !wrapLines {
-      let usedRect = textView.layoutManager.usedRect(for: textView.textContainer)
-      let insets = textView.textContainerInset
-      let padding = textView.textContainer.lineFragmentPadding
-      textView.contentSize = CGSize(
-        width: max(usedRect.width + insets.left + insets.right + padding * 2, textView.bounds.width),
-        height: max(usedRect.height + insets.top + insets.bottom, textView.bounds.height)
-      )
-    }
+    textView.textContainer.lineBreakMode = .byWordWrapping
+    textView.textContainer.widthTracksTextView = true
+    textView.textContainer.size.height = CGFloat.greatestFiniteMagnitude
   }
 
   func makeCoordinator() -> Coordinator {
@@ -781,7 +724,7 @@ struct CodeTextEditor: UIViewRepresentable {
     let paragraphStyle = NSMutableParagraphStyle()
     paragraphStyle.minimumLineHeight = lineHeight
     paragraphStyle.maximumLineHeight = lineHeight
-    paragraphStyle.lineBreakMode = wrapLines ? .byWordWrapping : .byClipping
+    paragraphStyle.lineBreakMode = .byWordWrapping
 
     let attributed = NSMutableAttributedString()
     for token in tokens {
@@ -807,7 +750,6 @@ struct CodeTextEditor: UIViewRepresentable {
   class Coordinator: NSObject, UITextViewDelegate {
     var parent: CodeTextEditor
     private var highlightTask: DispatchWorkItem?
-    var lastWrapLines: Bool?
     var lastFontSize: CGFloat?
 
     init(_ parent: CodeTextEditor) {
