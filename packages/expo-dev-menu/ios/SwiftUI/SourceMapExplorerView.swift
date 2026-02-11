@@ -702,17 +702,13 @@ struct CodeTextEditor: UIViewRepresentable {
       textView.text = text
     }
 
-    // Configure wrapping if changed
-    if wrapChanged {
-      configureWrapping(for: textView)
-    }
-
     // Re-apply highlighting if text, font, or wrap changed
     if textChanged || fontChanged || wrapChanged {
       let selectedRange = textView.selectedRange
       applyHighlighting(to: textView)
       // Restore cursor position if still valid
-      if selectedRange.location + selectedRange.length <= (textView.text?.count ?? 0) {
+      let nsLength = (textView.text as NSString?)?.length ?? 0
+      if selectedRange.location + selectedRange.length <= nsLength {
         textView.selectedRange = selectedRange
       }
     }
@@ -742,8 +738,7 @@ struct CodeTextEditor: UIViewRepresentable {
       // Wrap lines - text container tracks text view width
       textView.textContainer.lineBreakMode = .byWordWrapping
       textView.textContainer.widthTracksTextView = true
-      // Reset container size to track the text view
-      textView.textContainer.size = CGSize(width: textView.bounds.width - textView.textContainerInset.left - textView.textContainerInset.right, height: CGFloat.greatestFiniteMagnitude)
+      textView.textContainer.size.height = CGFloat.greatestFiniteMagnitude
     } else {
       // No wrap - allow horizontal scrolling
       textView.textContainer.lineBreakMode = .byClipping
@@ -752,9 +747,24 @@ struct CodeTextEditor: UIViewRepresentable {
     }
 
     // Force complete layout invalidation
-    textView.layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textView.text.count), actualCharacterRange: nil)
+    let length = (textView.text as NSString?)?.length ?? 0
+    if length > 0 {
+      textView.layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: length), actualCharacterRange: nil)
+    }
     textView.setNeedsLayout()
     textView.layoutIfNeeded()
+
+    // UITextView doesn't automatically update contentSize for horizontal scrolling —
+    // manually compute it from the laid-out text rect
+    if !wrapLines {
+      let usedRect = textView.layoutManager.usedRect(for: textView.textContainer)
+      let insets = textView.textContainerInset
+      let padding = textView.textContainer.lineFragmentPadding
+      textView.contentSize = CGSize(
+        width: max(usedRect.width + insets.left + insets.right + padding * 2, textView.bounds.width),
+        height: max(usedRect.height + insets.top + insets.bottom, textView.bounds.height)
+      )
+    }
   }
 
   func makeCoordinator() -> Coordinator {
@@ -771,6 +781,7 @@ struct CodeTextEditor: UIViewRepresentable {
     let paragraphStyle = NSMutableParagraphStyle()
     paragraphStyle.minimumLineHeight = lineHeight
     paragraphStyle.maximumLineHeight = lineHeight
+    paragraphStyle.lineBreakMode = wrapLines ? .byWordWrapping : .byClipping
 
     let attributed = NSMutableAttributedString()
     for token in tokens {
@@ -788,6 +799,9 @@ struct CodeTextEditor: UIViewRepresentable {
     if selectedRange.location + selectedRange.length <= attributed.length {
       textView.selectedRange = selectedRange
     }
+
+    // Re-apply wrapping — setting attributedText resets text container properties
+    configureWrapping(for: textView)
   }
 
   class Coordinator: NSObject, UITextViewDelegate {
