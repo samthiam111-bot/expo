@@ -13,10 +13,7 @@
                 "React",
                 "Hermes"
             ],
-            "excludeFromUmbrella": [
-                "RCT*.h",
-                "Swift-Bridging.h"
-            ],
+
             "targets": [
                 {
                     "type": "objc",
