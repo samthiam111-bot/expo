@@ -169,7 +169,9 @@ struct ProjectsAndSnacksSection: View {
       "snackId": DemoProject.displayName,
       "code": codeDict,
       "dependencies": DemoProject.snackDependencies,
-      "lessonDescription": "Learn to code on mobile"
+      "lessonDescription": "Learn to code on mobile",
+      "loadingIcon": "sparkles",
+      "loadingFixedDelay": 1.0
     ]
 
     viewModel.openApp(url: url, snackParams: snackParams)

@@ -34,6 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) HomeViewController *homeViewController;
 @property (nonatomic, strong) NSURL *pendingInitialHomeURL;
 @property (nonatomic, strong, nullable) EXAppLoadingCancelView *appLoadingOverlay;
+@property (nonatomic, assign) BOOL isPendingDelayedDismiss;
 
 @end
 
@@ -172,7 +173,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)moveHomeToVisible
 {
   [DevMenuManager.shared hideMenu];
-  [self hideAppLoadingOverlay];
+  [self _removeAppLoadingOverlay];  // Always dismiss immediately when going home
   _homeViewController.initialURL = nil;
   [self _showHomeViewController];
 }
@@ -285,12 +286,26 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)showAppLoadingOverlayWithStatusText:(nullable NSString *)statusText
 {
+  [self showAppLoadingOverlayWithStatusText:statusText iconImage:nil dismissDelay:0 fixedDismissDelay:0];
+}
+
+- (void)showAppLoadingOverlayWithStatusText:(nullable NSString *)statusText iconImage:(nullable UIImage *)iconImage dismissDelay:(NSTimeInterval)minimumDisplayDuration fixedDismissDelay:(NSTimeInterval)fixedDismissDelay
+{
   if (_appLoadingOverlay) {
     // Already visible or animating in - just make sure it stays visible
     [_appLoadingOverlay.layer removeAllAnimations];
     _appLoadingOverlay.alpha = 1.0;
     if (statusText) {
       _appLoadingOverlay.statusText = statusText;
+    }
+    if (iconImage) {
+      _appLoadingOverlay.iconImage = iconImage;
+    }
+    if (minimumDisplayDuration > 0) {
+      _appLoadingOverlay.minimumDisplayDuration = minimumDisplayDuration;
+    }
+    if (fixedDismissDelay > 0) {
+      _appLoadingOverlay.fixedDismissDelay = fixedDismissDelay;
     }
     return;
   }
@@ -299,8 +314,14 @@ NS_ASSUME_NONNULL_BEGIN
   _appLoadingOverlay.delegate = self;
   _appLoadingOverlay.frame = self.view.bounds;
   _appLoadingOverlay.backgroundColor = [UIColor whiteColor];
+  _appLoadingOverlay.shownAt = CFAbsoluteTimeGetCurrent();
+  _appLoadingOverlay.minimumDisplayDuration = minimumDisplayDuration;
+  _appLoadingOverlay.fixedDismissDelay = fixedDismissDelay;
   if (statusText) {
     _appLoadingOverlay.statusText = statusText;
+  }
+  if (iconImage) {
+    _appLoadingOverlay.iconImage = iconImage;
   }
   [self.view addSubview:_appLoadingOverlay];
   [self.view bringSubviewToFront:_appLoadingOverlay];
@@ -308,6 +329,36 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)hideAppLoadingOverlay
 {
+  if (!_appLoadingOverlay || _isPendingDelayedDismiss) {
+    return;
+  }
+
+  // Calculate how long to wait before dismissing
+  NSTimeInterval delay = _appLoadingOverlay.fixedDismissDelay;  // always added
+  if (delay <= 0) {
+    // Use minimum display duration: only wait if we haven't been visible long enough
+    NSTimeInterval minDuration = _appLoadingOverlay.minimumDisplayDuration;
+    if (minDuration > 0) {
+      NSTimeInterval elapsed = CFAbsoluteTimeGetCurrent() - _appLoadingOverlay.shownAt;
+      delay = MAX(0, minDuration - elapsed);
+    }
+  }
+
+  if (delay > 0) {
+    _isPendingDelayedDismiss = YES;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      weakSelf.isPendingDelayedDismiss = NO;
+      [weakSelf _removeAppLoadingOverlay];
+    });
+  } else {
+    [self _removeAppLoadingOverlay];
+  }
+}
+
+- (void)_removeAppLoadingOverlay
+{
+  _isPendingDelayedDismiss = NO;
   if (_appLoadingOverlay) {
     [_appLoadingOverlay.layer removeAllAnimations];
     [_appLoadingOverlay removeFromSuperview];

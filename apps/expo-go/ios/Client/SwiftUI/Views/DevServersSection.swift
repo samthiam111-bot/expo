@@ -189,7 +189,8 @@ struct DevServersSection: View {
     let snackParams: NSDictionary = [
       "channel": channel,
       "code": codeDict,
-      "isPlayground": true
+      "isPlayground": true,
+      "loadingIcon": "book.fill"
     ]
 
     viewModel.openApp(url: url, snackParams: snackParams)

@@ -127,7 +127,8 @@ struct LearnTabView: View {
       "dependencies": Lesson.snackDependencies,
       "isLesson": true,
       "lessonId": lesson.id,
-      "lessonDescription": lesson.shortDescription
+      "lessonDescription": lesson.shortDescription,
+      "loadingIcon": lesson.icon
     ]
 
     // Open app with snack params - session setup happens inside openApp

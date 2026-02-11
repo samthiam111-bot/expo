@@ -39,17 +39,18 @@ import EXDevMenu
     // Determine status text based on what we're opening
     let isLesson = (snackParams?["isLesson"] as? Bool) == true
     let isPlayground = (snackParams?["isPlayground"] as? Bool) == true
-    let statusText: String
-    if isLesson {
-      statusText = "Opening lesson..."
-    } else if isPlayground {
-      statusText = "Setting up a new playground..."
-    } else {
-      statusText = "Opening project..."
-    }
+    let isLessonLike = isLesson || isPlayground || snackParams?["lessonDescription"] != nil
 
-    // Show loading overlay immediately
-    EXKernel.sharedInstance().browserController.showAppLoadingOverlay(withStatusText: statusText)
+    // Show loading overlay
+    if isLessonLike {
+      let sfSymbol = snackParams?["loadingIcon"] as? String ?? "book.fill"
+      let icon = Self.makeLoadingIcon(sfSymbol: sfSymbol)
+      let fixedDelay = snackParams?["loadingFixedDelay"] as? Double ?? 0
+      let minDuration = fixedDelay > 0 ? 0 : 0.5  // Use minimum display duration unless a fixed delay is set
+      EXKernel.sharedInstance().browserController.showAppLoadingOverlay(withStatusText: "Preparing playground...", iconImage: icon, dismissDelay: minDuration, fixedDismissDelay: fixedDelay)
+    } else {
+      EXKernel.sharedInstance().browserController.showAppLoadingOverlay(withStatusText: "Opening project...")
+    }
 
     // For non-snack apps, open synchronously to avoid timing issues with native module registration.
     // The async Task wrapper was causing race conditions where the app would start before
@@ -126,6 +127,38 @@ import EXDevMenu
   /// Convenience overload for non-snack apps (no session setup needed)
   @objc public func openApp(url: String, completion: @escaping (Bool, String?) -> Void) {
     openApp(url: url, snackParams: nil, completion: completion)
+  }
+
+  /// Creates a blue gradient rounded-rect icon with a white SF Symbol, matching the style
+  /// used for lesson rows and the demo project card in the home screen.
+  private static func makeLoadingIcon(sfSymbol: String) -> UIImage {
+    let size = CGSize(width: 80, height: 80)
+    let cornerRadius: CGFloat = 25
+
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { context in
+      let rect = CGRect(origin: .zero, size: size)
+
+      // Blue gradient background (matches expoBlue)
+      let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
+      path.addClip()
+
+      let colors = [
+        UIColor(red: 0.235, green: 0.624, blue: 0.996, alpha: 1).cgColor,  // #3c9ffe
+        UIColor(red: 0.008, green: 0.455, blue: 0.875, alpha: 1).cgColor   // #0274df
+      ]
+      if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 1]) {
+        context.cgContext.drawLinearGradient(gradient, start: CGPoint(x: size.width / 2, y: 0), end: CGPoint(x: size.width / 2, y: size.height), options: [])
+      }
+
+      // White SF Symbol centered
+      let symbolConfig = UIImage.SymbolConfiguration(pointSize: 36, weight: .semibold)
+      if let symbol = UIImage(systemName: sfSymbol, withConfiguration: symbolConfig)?.withTintColor(.white, renderingMode: .alwaysOriginal) {
+        let symbolSize = symbol.size
+        let symbolOrigin = CGPoint(x: (size.width - symbolSize.width) / 2, y: (size.height - symbolSize.height) / 2)
+        symbol.draw(at: symbolOrigin)
+      }
+    }
   }
 
   @objc public func isAuthenticated() -> Bool {
