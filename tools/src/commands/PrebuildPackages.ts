@@ -633,13 +633,13 @@ export default (program: Command) => {
     )
     .alias('prebuild')
     .option(
-      '-v, --version <version>',
+      '--version <version>',
       'Provides the current React Native version.',
       'current react-native version for BareExpo'
     )
     .option('--hermes-version <version>', 'Provides the current Hermes version.')
     .option(
-      '--build-flavor <flavor>',
+      '-f, --build-flavor <flavor>',
       'Build flavor (Debug or Release). If not specified, builds both.'
     )
     .option(
@@ -660,16 +660,16 @@ export default (program: Command) => {
       false
     )
     .option('--clean-build', 'Cleans the build folder before prebuilding packages.', false)
-    .option('--generate', 'Only generate Package.swift files without building.', false)
-    .option('--artifacts', 'Only download artifacts without building packages.', false)
-    .option('--build', 'Build swift package.', false)
-    .option('--compose', 'Compose xcframework from build artifacts.', false)
+    .option('-g, --generate', 'Only generate Package.swift files without building.', false)
+    .option('-a, --artifacts', 'Only download artifacts without building packages.', false)
+    .option('-b, --build', 'Build swift package.', false)
+    .option('-c, --compose', 'Compose xcframework from build artifacts.', false)
     .option(
-      '--platform <platform>',
+      '-p, --platform <platform>',
       'Build platform (iOS, macOS, tvOS, watchOS). If not specified, builds for all platforms defined in the package.'
     )
     .option(
-      '--product-name <name>',
+      '-n, --product-name <name>',
       'Specify a single product name to prebuild if a package contains multiple products.'
     )
     .option(
@@ -678,7 +678,7 @@ export default (program: Command) => {
       false
     )
     .option(
-      '--verify',
+      '-v, --verify',
       'Verify that thexcframeworks are correctly built and contains the expected architectures.',
       false
     )
