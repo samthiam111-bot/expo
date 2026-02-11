@@ -577,6 +577,15 @@ function resolveSourceTarget(
     resolved.linkerSettings = resolved.linkedFrameworks.map((fw) => `.linkedFramework("${fw}")`);
   }
 
+  // Linker flags (unsafe flags)
+  if (target.linkerFlags && target.linkerFlags.length > 0) {
+    if (!resolved.linkerSettings) {
+      resolved.linkerSettings = [];
+    }
+    const quotedFlags = target.linkerFlags.map((f) => `"${f}"`).join(', ');
+    resolved.linkerSettings.push(`.unsafeFlags([${quotedFlags}])`);
+  }
+
   // Pass through resources if defined
   if (target.resources && target.resources.length > 0) {
     resolved.resources = target.resources.map((r) => ({

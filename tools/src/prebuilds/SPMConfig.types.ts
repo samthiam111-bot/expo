@@ -105,6 +105,8 @@ export interface SourceTarget {
    * with common/debug/release keys. Each key can be an array (both C and C++) or an object
    * with c/cxx keys. */
   compilerFlags?: CompilerFlags;
+  /** Linker flags passed via .unsafeFlags() in linkerSettings (e.g., '-all_load', '-lz') */
+  linkerFlags?: string[];
   /** File mappings to reorganize files during source generation. Files matching 'from' pattern
    * will be copied to the 'to' location instead of preserving their original directory structure */
   fileMapping?: FileMapping[];

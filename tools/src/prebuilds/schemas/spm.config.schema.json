@@ -329,6 +329,12 @@
                     "$ref": "#/definitions/compilerFlagsDefinition",
                     "description": "Compiler flags for C/C++/ObjC. Can be an array (applied to all builds) or an object with common/debug/release keys. Each key can be an array (both C and C++) or an object with c/cxx keys."
                 },
+                "linkerFlags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Linker flags passed via .unsafeFlags() in linkerSettings (e.g., '-all_load', '-lz')",
+                    "default": [ ]
+                },
                 "fileMapping": {
                     "type": "array",
                     "items": { "$ref": "#/definitions/fileMapping" },
@@ -410,6 +416,12 @@
                     "$ref": "#/definitions/compilerFlagsDefinition",
                     "description": "Compiler flags for C/C++/ObjC. Can be an array (applied to all builds) or an object with common/debug/release keys. Each key can be an array (both C and C++) or an object with c/cxx keys."
                 },
+                "linkerFlags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Linker flags passed via .unsafeFlags() in linkerSettings (e.g., '-all_load', '-lz')",
+                    "default": [ ]
+                },
                 "fileMapping": {
                     "type": "array",
                     "items": { "$ref": "#/definitions/fileMapping" },
@@ -490,6 +502,12 @@
                 "compilerFlags": {
                     "$ref": "#/definitions/compilerFlagsDefinition",
                     "description": "Compiler flags for C/C++/ObjC. Can be an array (applied to all builds) or an object with common/debug/release keys. Each key can be an array (both C and C++) or an object with c/cxx keys."
+                },
+                "linkerFlags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Linker flags passed via .unsafeFlags() in linkerSettings (e.g., '-all_load', '-lz')",
+                    "default": [ ]
                 },
                 "fileMapping": {
                     "type": "array",
