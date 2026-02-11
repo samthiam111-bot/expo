@@ -103,6 +103,16 @@ export class Package {
     this.expoModuleConfig = readExpoModuleConfigJson(this.expoModulesConfigPath);
   }
 
+  /**
+   * Path where build artifacts (.build/) are stored, centralized under packages/precompile/.
+   */
+  get buildPath(): string {
+    return path.join(
+      Directories.getPrecompileDir(),
+      this.packageJson.name ?? path.basename(this.path)
+    );
+  }
+
   get hasPlugin(): boolean {
     return fs.pathExistsSync(path.join(this.path, 'plugin'));
   }

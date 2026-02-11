@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import { glob } from 'glob';
 import path from 'path';
 
-import { getExternalPackagesDir, getNodeModulesDir } from '../Directories';
+import { getExternalPackagesDir, getNodeModulesDir, getPrecompileDir } from '../Directories';
 import { Package } from '../Packages';
 import { SPMConfig } from './SPMConfig.types';
 
@@ -18,6 +18,13 @@ export interface SPMPackageSource {
    * Path to the package source files (for file operations like glob, copy, etc.)
    */
   path: string;
+
+  /**
+   * Path where build artifacts (.build/) are stored.
+   * Centralized under packages/precompile/<package-name>/ so that build artifacts
+   * survive yarn reinstalls and are separated from source code.
+   */
+  buildPath: string;
 
   /**
    * The npm package name
@@ -51,6 +58,12 @@ export class ExternalPackage implements SPMPackageSource {
   path: string;
 
   /**
+   * Path where build artifacts (.build/) are stored, under packages/precompile/<package-name>/.
+   * Separate from node_modules so builds survive yarn reinstalls.
+   */
+  buildPath: string;
+
+  /**
    * The npm package name (e.g., 'react-native-svg')
    */
   packageName: string;
@@ -69,6 +82,7 @@ export class ExternalPackage implements SPMPackageSource {
     this.configPath = configPath;
     this.packageName = packageName;
     this.path = path.join(getNodeModulesDir(), packageName);
+    this.buildPath = path.join(getPrecompileDir(), packageName);
 
     const spmConfigPath = path.join(configPath, SPMConfigFileName);
     if (!fs.existsSync(spmConfigPath)) {

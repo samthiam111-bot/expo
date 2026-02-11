@@ -57,19 +57,21 @@ export const SPMBuild = {
   cleanBuildFolderAsync: async (pkg: SPMPackageSource, product: SPMProduct): Promise<void> => {
     const buildFolderToClean = SPMBuild.getPackageBuildPath(pkg, product);
     logger.info(
-      `🧹 Cleaning build folder ${chalk.green(path.relative(pkg.path, buildFolderToClean))}...`
+      `🧹 Cleaning build folder ${chalk.green(path.relative(pkg.buildPath, buildFolderToClean))}...`
     );
     await fs.remove(buildFolderToClean);
   },
 
   /**
    * Returns the output path where we'll build the frameworks for the package.
+   * Build artifacts are stored under packages/precompile/<package-name>/.build/
+   * so they survive yarn reinstalls and are centralized.
    * @param pkg Package
    * @param product Product
    * @returns Output path
    */
   getPackageBuildPath: (pkg: SPMPackageSource, product: SPMProduct) => {
-    return path.join(pkg.path, '.build', 'frameworks', pkg.packageName, product.name);
+    return path.join(pkg.buildPath, '.build', 'frameworks', pkg.packageName, product.name);
   },
 
   /**

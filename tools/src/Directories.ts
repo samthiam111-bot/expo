@@ -26,6 +26,10 @@ export function getExternalPackagesDir(): string {
   return path.join(getPackagesDir(), 'external');
 }
 
+export function getPrecompileDir(): string {
+  return path.join(getPackagesDir(), 'precompile');
+}
+
 export function getNodeModulesDir(): string {
   return path.join(getExpoRepositoryRootDir(), 'node_modules');
 }

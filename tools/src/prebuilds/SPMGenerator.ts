@@ -387,7 +387,7 @@ ${allImports.join('\n')}
    * @returns Path to generated files path
    */
   getGeneratedProductFilesPath: (pkg: SPMPackageSource, product: SPMProduct): string => {
-    return path.join(pkg.path, '.build', 'source', pkg.packageName, product.name);
+    return path.join(pkg.buildPath, '.build', 'source', pkg.packageName, product.name);
   },
 
   /**

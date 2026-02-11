@@ -49,7 +49,7 @@ export function hasCodegen(pkg: SPMPackageSource): boolean {
  * Gets the expected output path for codegen files
  */
 export function getCodegenOutputPath(pkg: SPMPackageSource): string {
-  return path.join(pkg.path, '.build', 'codegen');
+  return path.join(pkg.buildPath, '.build', 'codegen');
 }
 
 /**
