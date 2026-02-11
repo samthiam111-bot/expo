@@ -75,7 +75,7 @@ struct SettingsTabView: View {
           .background(Color.expoSecondarySystemBackground)
           .clipShape(RoundedRectangle(cornerRadius: BorderRadius.large))
 
-          Text("Selected gestures will open the tool menu while running a project.")
+          Text("Selected gestures will open the tool menu.")
             .font(.caption)
             .foregroundColor(.secondary)
         }
