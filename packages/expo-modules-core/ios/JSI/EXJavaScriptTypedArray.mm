@@ -26,4 +26,10 @@
   return _typedArrayPtr->getRawPointer(*[_runtime get]);
 }
 
+- (nonnull EXJavaScriptArrayBuffer *)getBuffer
+{
+  auto bufferObject = std::make_shared<jsi::Object>(_typedArrayPtr->getBuffer(*[_runtime get]));
+  return [[EXJavaScriptArrayBuffer alloc] initWith:bufferObject runtime:_runtime];
+}
+
 @end

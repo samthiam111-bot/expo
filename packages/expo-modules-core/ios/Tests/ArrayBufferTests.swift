@@ -199,6 +199,17 @@ struct ArrayBufferTests {
     }
 
     @Test
+    func `ArrayBuffer argument accepts Typed Arrays`() throws {
+      let result = try runtime.eval([
+        "typedArray = new Uint8Array([42, 84])",
+        "expo.modules.ArrayBufferTests.readBytesAsArray(typedArray, 2)"
+      ]).asArray()
+
+      #expect(try result[0]?.asInt() == 42)
+      #expect(try result[1]?.asInt() == 84)
+    }
+
+    @Test
     func `returns ArrayBuffer to JavaScript`() throws {
       let buffer = try runtime.eval("expo.modules.ArrayBufferTests.createNative(32)").asArrayBuffer()
 

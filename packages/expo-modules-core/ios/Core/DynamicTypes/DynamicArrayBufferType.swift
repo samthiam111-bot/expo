@@ -18,7 +18,11 @@ internal struct DynamicArrayBufferType: AnyDynamicType {
    Converts JS array buffer to its native representation.
    */
   func cast(jsValue: JavaScriptValue, appContext: AppContext) throws -> Any {
-    guard let rawArrayBuffer = jsValue.getArrayBuffer() else {
+    let rawArrayBuffer = if let arrayBuffer = jsValue.getArrayBuffer() {
+      arrayBuffer
+    } else if let typedArray = jsValue.getTypedArray() {
+      typedArray.getBuffer()
+    } else {
       throw NotArrayBufferException(innerType)
     }
     let jsArrayBuffer = JavaScriptArrayBuffer(rawArrayBuffer)
