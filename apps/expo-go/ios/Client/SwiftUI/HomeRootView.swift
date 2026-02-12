@@ -24,6 +24,7 @@ struct HomeRootView: View {
       NavigationView {
         HomeTabView()
       }
+      .navigationViewStyle(.stack)
       .tabItem {
         Image(systemName: "house.fill")
         Text("Home")
@@ -33,6 +34,7 @@ struct HomeRootView: View {
       NavigationView {
         LearnTabView()
       }
+      .navigationViewStyle(.stack)
       .tabItem {
         Image(systemName: "book.fill")
         Text("Learn")
@@ -42,6 +44,7 @@ struct HomeRootView: View {
       NavigationView {
         DiagnosticsTabView()
       }
+      .navigationViewStyle(.stack)
       .tabItem {
         Image(systemName: "stethoscope")
         Text("Diagnostics")
