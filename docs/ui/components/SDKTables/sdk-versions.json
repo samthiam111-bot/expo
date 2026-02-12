@@ -1,6 +1,6 @@
 {
   "sdkVersions": [
-        {
+    {
       "sdk": "55.0.0",
       "android": "7+",
       "compileSdkVersion": "36",
