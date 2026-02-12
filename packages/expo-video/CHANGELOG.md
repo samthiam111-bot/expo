@@ -8,12 +8,16 @@
 
 ### 🐛 Bug fixes
 
+### 💡 Others
+
+## 3.0.16 — 2026-02-12
+
+### 🐛 Bug fixes
+
 - [iOS] Prevents blocking main thread when loading asset tracks for non-HSL tracks ([#42037](https://github.com/expo/expo/pull/42037) by [@santitopo](https://github.com/santitopo))
 - [Android] Fix crash due to `SimpleCache` directory lock conflicts. ([#42723](https://github.com/expo/expo/pull/42723) by [@santitopo](https://github.com/santitopo))
 - Fix `fullscreenOptions.enable` and `allowsFullscreen` props issues. ([#41600](https://github.com/expo/expo/pull/41600) by [@behenate](https://github.com/behenate))
 - [Android] Fix only one player getting released when reloading with multiple players present. ([#42780](https://github.com/expo/expo/pull/42780) by [@behenate](https://github.com/behenate))
-
-### 💡 Others
 
 ## 3.0.15 — 2025-12-05
 
