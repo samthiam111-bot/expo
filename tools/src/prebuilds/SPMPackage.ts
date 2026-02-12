@@ -72,10 +72,39 @@ function getReactNativeMinorVersion(pkgPath: string): number {
   }
 }
 
+const _packageVersionCache: Record<string, string> = {};
+
+/**
+ * Resolves the package version from the package.json in the given path.
+ * @param pkgPath Path to the package (e.g., /workspace/packages/external/react-native-worklets)
+ * @returns The version string from package.json
+ * @throws if the version cannot be resolved
+ */
+function getPackageVersion(pkgPath: string): string {
+  if (!_packageVersionCache[pkgPath]) {
+    const pgkJsonPath = path.join(pkgPath, 'package.json');
+    try {
+      const pkgJson = fs.readJsonSync(pgkJsonPath);
+      const version: string = pkgJson.version;
+      _packageVersionCache[pkgPath] = version;
+    } catch (e: any) {
+      throw new Error(`Failed to resolve PACKAGE_VERSION from ${pgkJsonPath}: ${e.message}`);
+    }
+  }
+  return _packageVersionCache[pkgPath];
+}
+
+/**
+ * Mapping of variable names to their resolver functions for compiler flag substitution.
+ */
+const REPLACEMENTS = {
+  REACT_NATIVE_MINOR_VERSION: getReactNativeMinorVersion,
+  PACKAGE_VERSION: getPackageVersion,
+};
+
 /**
  * Substitutes known variables in compiler flag strings.
- * Supported variables:
- * - ${REACT_NATIVE_MINOR_VERSION}: Replaced with the minor version of react-native (e.g., 83)
+ * Supported variables in @see(REPLACEMENTS)
  */
 function substituteCompilerFlagVariables(flags: string[], pkgPath: string): string[] {
   const hasVariable = flags.some((f) => f.includes('${'));
@@ -83,11 +112,18 @@ function substituteCompilerFlagVariables(flags: string[], pkgPath: string): stri
     return flags;
   }
   return flags.map((flag) => {
-    if (flag.includes('${REACT_NATIVE_MINOR_VERSION}')) {
-      const minor = getReactNativeMinorVersion(pkgPath);
-      return flag.replace(/\$\{REACT_NATIVE_MINOR_VERSION\}/g, String(minor));
+    // Find in REPLACEMENTS:
+    const replacements = Object.keys(REPLACEMENTS);
+    const matches = replacements.filter((key) => flag.includes(key));
+    if (matches.length > 0) {
+      const match = matches[0];
+      const replacementFunc = REPLACEMENTS[match];
+      if (replacementFunc) {
+        const replacementValue = String(replacementFunc(pkgPath));
+        return flag.replace(new RegExp(`\\$\\{${match}\\}`, 'g'), replacementValue);
+      }
     }
-    return flag;
+    return flag; // Return original flag if no replacement function found
   });
 }
 
@@ -772,12 +808,6 @@ function buildCSettings(
       cSettings.push(`.headerSearchPath("${mappedPath}")`);
       cxxSettings.push(`.headerSearchPath("${mappedPath}")`);
     }
-  }
-
-  // Define package version macro (matches template line 689-695)
-  if (packageVersion) {
-    cSettings.push(`.define("EXPO_MODULES_CORE_VERSION", to: "${packageVersion}")`);
-    cxxSettings.push(`.define("EXPO_MODULES_CORE_VERSION", to: "${packageVersion}")`);
   }
 
   // Define RCT_NEW_ARCH_ENABLED (matches template line 763-765)
