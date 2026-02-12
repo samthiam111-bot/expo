@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 import type { ExpoCliExtensionAppInfo } from './CliExtension.types.js';
 
 export async function queryAllInspectorAppsAsync(

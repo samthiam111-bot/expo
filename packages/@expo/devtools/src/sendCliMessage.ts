@@ -23,9 +23,7 @@ export async function sendCliMessageAsync(
 ): Promise<Record<string, string | null>> {
   // Sanity check: ensure that all apps share the same WebSocket URL
   if (apps.length === 0) {
-    return Promise.reject(
-      new SendMessageError('No apps provided to send the message to.', apps[0])
-    );
+    return Promise.reject(new Error('No apps provided to send the message to.'));
   }
 
   // Check that all apps share the same broadcast URL

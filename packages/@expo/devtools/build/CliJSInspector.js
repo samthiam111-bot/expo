@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 export async function queryAllInspectorAppsAsync(metroServerOrigin) {
     const resp = await fetch(`${metroServerOrigin}/json/list`);
     // The newest runtime will be at the end of the list,

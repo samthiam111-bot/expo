@@ -1,10 +1,10 @@
+import { format } from 'util';
+
 import type {
   ExpoCliExtensionCommandSchema,
   ExpoCliExtensionExecutor,
   ExpoCliExtensionParameters,
 } from './CliExtension.types.js';
-
-import { format } from 'util';
 
 /**
  * Executes an Expo CLI extension command with the provided executor function.

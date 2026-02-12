@@ -13,7 +13,7 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 export async function sendCliMessageAsync(message, pluginName, apps, timeoutMs = DEFAULT_TIMEOUT_MS) {
     // Sanity check: ensure that all apps share the same WebSocket URL
     if (apps.length === 0) {
-        return Promise.reject(new SendMessageError('No apps provided to send the message to.', apps[0]));
+        return Promise.reject(new Error('No apps provided to send the message to.'));
     }
     // Check that all apps share the same broadcast URL
     if (apps.some((app) => new URL(app.webSocketDebuggerUrl).host !== new URL(apps[0].webSocketDebuggerUrl).host)) {
