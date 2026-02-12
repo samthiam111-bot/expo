@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-import { ExpoCliExtensionAppInfo } from './CliExtension.types.js';
+import type { ExpoCliExtensionAppInfo } from './CliExtension.types.js';
 
 export async function queryAllInspectorAppsAsync(
   metroServerOrigin: string
