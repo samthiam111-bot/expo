@@ -31,37 +31,23 @@ const execCommand = (
 /**
  * Finds the dSYM bundle for a given xcframework slice.
  *
- * dSYMs are stored in: .xcframeworks/<buildType>/dSYMs/<productName>/<sliceName>/<product>.framework.dSYM
- * Slice names are build products dir names like "Debug-iphoneos", "Debug-iphonesimulator".
- * We match them to xcframework slice IDs (like "ios-arm64") via the SDK/platform name.
+ * dSYMs are embedded inside the xcframework via `xcodebuild -create-xcframework -debug-symbols`.
+ * They live at: <Product>.xcframework/<sliceId>/dSYMs/<Product>.framework.dSYM
  *
- * @param dsymsBasePath Path to the dSYMs/<productName>/ directory
- * @param sliceSdkName The SDK name derived from the xcframework slice (e.g., "iphoneos")
+ * @param xcframeworkPath Path to the .xcframework bundle
+ * @param sliceId The xcframework slice identifier (e.g., "ios-arm64")
  * @param productName The product name (e.g., "ExpoModulesCore")
  * @returns Path to the .dSYM bundle, or null if not found
  */
 export const findDsymForSlice = (
-  dsymsBasePath: string,
-  sliceSdkName: string,
+  xcframeworkPath: string,
+  sliceId: string,
   productName: string
 ): string | null => {
-  if (!fs.existsSync(dsymsBasePath)) {
-    return null;
+  const dsymPath = path.join(xcframeworkPath, sliceId, 'dSYMs', `${productName}.framework.dSYM`);
+  if (fs.existsSync(dsymPath)) {
+    return dsymPath;
   }
-
-  const sliceDirs = fs.readdirSync(dsymsBasePath, { withFileTypes: true });
-  for (const dir of sliceDirs) {
-    if (!dir.isDirectory()) continue;
-
-    // Match slice directories like "Debug-iphoneos" against the SDK name "iphoneos"
-    if (dir.name.toLowerCase().includes(sliceSdkName.toLowerCase())) {
-      const dsymPath = path.join(dsymsBasePath, dir.name, `${productName}.framework.dSYM`);
-      if (fs.existsSync(dsymPath)) {
-        return dsymPath;
-      }
-    }
-  }
-
   return null;
 };
 
@@ -69,15 +55,15 @@ export const findDsymForSlice = (
  * Verifies that a dSYM bundle exists for a given xcframework slice.
  */
 export const verifyDsymPresence = (
-  dsymsBasePath: string,
+  xcframeworkPath: string,
   slice: XCFrameworkSlice
 ): VerificationResult => {
-  const dsymPath = findDsymForSlice(dsymsBasePath, slice.sdkName, slice.frameworkName);
+  const dsymPath = findDsymForSlice(xcframeworkPath, slice.sliceId, slice.frameworkName);
 
   if (!dsymPath) {
     return {
       success: false,
-      message: `No dSYM found for slice ${slice.sliceId} (looked in ${dsymsBasePath} for SDK ${slice.sdkName})`,
+      message: `No dSYM found for slice ${slice.sliceId} (looked in ${xcframeworkPath}/${slice.sliceId}/dSYMs/)`,
     };
   }
 
@@ -102,10 +88,10 @@ export const verifyDsymPresence = (
  * stale from a previous build.
  */
 export const verifyDsymUuidMatch = (
-  dsymsBasePath: string,
+  xcframeworkPath: string,
   slice: XCFrameworkSlice
 ): VerificationResult => {
-  const dsymPath = findDsymForSlice(dsymsBasePath, slice.sdkName, slice.frameworkName);
+  const dsymPath = findDsymForSlice(xcframeworkPath, slice.sliceId, slice.frameworkName);
   if (!dsymPath) {
     return {
       success: false,
@@ -184,10 +170,10 @@ export const verifyDsymUuidMatch = (
  * - System/SDK paths (Xcode toolchain, SDKs, etc.)
  */
 export const verifyDsymDebugPrefixMapping = (
-  dsymsBasePath: string,
+  xcframeworkPath: string,
   slice: XCFrameworkSlice
 ): VerificationResult => {
-  const dsymPath = findDsymForSlice(dsymsBasePath, slice.sdkName, slice.frameworkName);
+  const dsymPath = findDsymForSlice(xcframeworkPath, slice.sliceId, slice.frameworkName);
   if (!dsymPath) {
     return {
       success: false,

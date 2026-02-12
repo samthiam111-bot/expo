@@ -138,14 +138,9 @@ module Expo
 
           spec.vendored_frameworks = vendored_paths
 
-          # Remap dSYM source paths so debuggers can resolve source files on this machine.
-          # dSYMs are stored separately from the xcframework (not code-signed), so we can
-          # freely write UUID plists into them at pod install time.
-          remap_dsym_source_paths(xcframeworks_dir, product_name, pod_info)
-
           # Add script phases:
           # 1. Switch xcframework symlink based on build configuration (before compile)
-          # 2. Copy dSYMs to build output directory (after compile)
+          # 2. Write dSYM source path mapping plists (before compile)
           add_script_phases(spec, product_name, xcframeworks_dir, pod_info)
 
           return true
@@ -154,133 +149,53 @@ module Expo
         false
       end
 
-      # Remaps dSYM source paths at pod install time so that debuggers (lldb) can resolve
-      # source files on the consumer's machine without any manual configuration.
-      #
-      # During the prebuild, absolute source paths are replaced with a canonical /expo-src/
-      # prefix via -fdebug-prefix-map. This method writes UUID plists into each dSYM that
-      # map /expo-src/packages/<npm_package> to the actual local package path.
-      #
-      # dSYMs are stored separately from the signed xcframework (in a sibling dSYMs/ directory),
-      # so they can be freely modified without invalidating code signatures.
-      #
-      # @param xcframeworks_dir [String] Path to the .xcframeworks directory
-      # @param product_name [String] The product/module name (e.g., "ExpoModulesCore")
-      # @param pod_info [Hash] Package info from spm.config.json lookup
-      def remap_dsym_source_paths(xcframeworks_dir, product_name, pod_info)
-        npm_package = pod_info[:npm_package]
-
-        # The local package root is the parent of the podspec directory.
-        # For Expo packages: podspec_dir = <repo>/packages/expo-camera/ios → package root = <repo>/packages/expo-camera
-        # For consumer apps: podspec_dir = <app>/node_modules/expo-camera/ios → package root = <app>/node_modules/expo-camera
-        local_package_root = File.dirname(pod_info[:podspec_dir])
-
-        # Build source path mappings from the canonical /expo-src prefix to local paths.
-        # Two mappings cover both internal packages (packages/<name>) and external packages (node_modules/<name>).
-        mappings = [
-          ["/expo-src/packages/#{npm_package}", local_package_root],
-          ["/expo-src/node_modules/#{npm_package}", local_package_root],
-        ]
-
-        # Process dSYMs for all available build flavors (debug, release)
-        ['debug', 'release'].each do |flavor|
-          dsyms_dir = File.join(xcframeworks_dir, flavor, 'dSYMs', product_name)
-          next unless File.directory?(dsyms_dir)
-
-          # Find all .dSYM bundles across all slices
-          dsym_bundles = Dir.glob(File.join(dsyms_dir, '**', '*.dSYM')).select do |p|
-            File.directory?(p) && File.exist?(File.join(p, 'Contents', 'Info.plist'))
-          end
-
-          next if dsym_bundles.empty?
-
-          dsym_bundles.each do |dsym_path|
-            begin
-              remap_single_dsym(dsym_path, mappings)
-            rescue => e
-              Pod::UI.warn "[Expo-precompiled] Failed to remap dSYM #{dsym_path}: #{e.message}"
-            end
-          end
-        end
-      end
-
-      # Writes UUID plists into a single dSYM bundle for source path remapping.
-      #
-      # @param dsym_path [String] Path to the .dSYM bundle
-      # @param mappings [Array<Array<String>>] Array of [from, to] path mapping pairs
-      def remap_single_dsym(dsym_path, mappings)
-        uuid_output = `dwarfdump --uuid "#{dsym_path}" 2>/dev/null`
-        uuids = uuid_output.scan(/UUID:\s+([0-9A-F-]{36})/i).flatten
-        return if uuids.empty?
-
-        resources_dir = File.join(dsym_path, 'Contents', 'Resources')
-        FileUtils.mkdir_p(resources_dir)
-
-        plist_content = generate_dsym_plist_content(mappings)
-
-        uuids.each do |uuid|
-          plist_path = File.join(resources_dir, "#{uuid}.plist")
-          File.write(plist_path, plist_content)
-        end
-      end
-
-      # Generates the plist XML content for dSYM source path remapping.
-      #
-      # @param mappings [Array<Array<String>>] Array of [from, to] path mapping pairs
-      # @return [String] Plist XML content
-      def generate_dsym_plist_content(mappings)
-        remapping_entries = mappings.map do |from, to|
-          "    <key>#{from}</key>\n    <string>#{to}</string>"
-        end.join("\n")
-
-        first_from, first_to = mappings.first
-
-        <<~PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>DBGVersion</key>
-            <string>3</string>
-            <key>DBGBuildSourcePath</key>
-            <string>#{first_from}</string>
-            <key>DBGSourcePath</key>
-            <string>#{first_to}</string>
-            <key>DBGSourcePathRemapping</key>
-            <dict>
-          #{remapping_entries}
-            </dict>
-          </dict>
-          </plist>
-        PLIST
-      end
-
-      # Adds both script phases to the podspec:
+      # Adds script phases to the podspec:
       # 1. XCFramework switch phase (before_compile) — switches debug/release symlink
-      # 2. dSYM copy phase (after_compile) — copies dSYMs to build output with correct paths
+      # 2. dSYM source map resolution phase (before_compile) — writes UUID plists into
+      #    the source-tree xcframework's embedded dSYMs so that Spotlight can find them
+      #    and lldb can resolve source paths via DBGSourcePathRemapping
       #
       # @param spec [Pod::Spec] The podspec to add script phases to
       # @param product_name [String] The product/module name
       # @param xcframeworks_dir [String] Absolute path to the .xcframeworks directory
       # @param pod_info [Hash] Package info from spm.config.json lookup
       def add_script_phases(spec, product_name, xcframeworks_dir, pod_info)
-        script_path = File.join(__dir__, 'replace-xcframework.js')
+        # Compute paths relative to installation_root so script phases don't contain absolute paths.
+        # For pod targets, $SRCROOT points to the Pods/ directory, so we use $PODS_ROOT/..
+        # to get back to the installation_root (e.g., <repo>/apps/bare-expo/ios).
+        project_root = Pod::Config.instance.installation_root  # e.g., <repo>/apps/bare-expo/ios
+        scripts_dir = __dir__
+        switch_script_rel = Pathname.new(File.join(scripts_dir, 'replace-xcframework.js')).relative_path_from(project_root).to_s
+        dsym_script_rel = Pathname.new(File.join(scripts_dir, 'resolve-dsym-sourcemaps.js')).relative_path_from(project_root).to_s
+        xcframeworks_dir_rel = Pathname.new(xcframeworks_dir).relative_path_from(project_root).to_s
+        package_root_rel = Pathname.new(pod_info[:package_root]).relative_path_from(project_root).to_s
+
+        # $PODS_ROOT/.. = installation_root at build time
+        pods_parent = "$PODS_ROOT/.."
+        switch_script_path = "#{pods_parent}/#{switch_script_rel}"
+        dsym_script_path = "#{pods_parent}/#{dsym_script_rel}"
+        xcframeworks_dir_var = "#{pods_parent}/#{xcframeworks_dir_rel}"
+        package_root_var = "#{pods_parent}/#{package_root_rel}"
+
         switch_stamp = "$(DERIVED_FILE_DIR)/expo-xcframework-switch-#{product_name}-$(CONFIGURATION).stamp"
-        dsym_stamp = "$(DERIVED_FILE_DIR)/expo-dsym-copy-#{product_name}-$(CONFIGURATION).stamp"
+        dsym_stamp = "$(DERIVED_FILE_DIR)/expo-dsym-resolve-#{product_name}-$(CONFIGURATION).stamp"
+
+        npm_package = pod_info[:npm_package]
 
         switch_phase = {
           :name => "[Expo] Switch #{spec.name} XCFramework for build configuration",
           :execution_position => :before_compile,
-          :input_files => [script_path],
+          :input_files => ["#{pods_parent}/#{switch_script_rel}"],
           :output_files => [switch_stamp],
-          :script => xcframework_switch_script(product_name, xcframeworks_dir, script_path, switch_stamp, pod_info[:spm_dependency_frameworks] || []),
+          :script => xcframework_switch_script(product_name, xcframeworks_dir_var, switch_script_path, switch_stamp, pod_info[:spm_dependency_frameworks] || []),
         }
 
         dsym_phase = {
-          :name => "[Expo] Copy #{spec.name} dSYMs to build output",
-          :execution_position => :after_compile,
+          :name => "[Expo] Resolve #{spec.name} dSYM source maps",
+          :execution_position => :before_compile,
+          :input_files => ["#{pods_parent}/#{dsym_script_rel}"],
           :output_files => [dsym_stamp],
-          :script => dsym_copy_script(product_name, xcframeworks_dir, dsym_stamp),
+          :script => dsym_resolve_script(product_name, xcframeworks_dir_var, dsym_script_path, npm_package, package_root_var),
         }
 
         spec.script_phases = [switch_phase, dsym_phase]
@@ -326,58 +241,44 @@ touch "$STAMP_FILE"
         EOS
       end
 
-      # Returns the shell script for the dSYM copy phase.
-      # This copies pre-remapped dSYMs from the separate dSYMs/ directory into the
-      # Xcode build output ($DWARF_DSYM_FOLDER_PATH) so that debuggers find them.
+      # Returns the shell script for the dSYM source map resolution phase.
+      # Writes UUID plists into the source-tree dSYMs for source path remapping.
+      # lldb discovers dSYMs via Spotlight (mdfind by UUID), so the dSYMs must be
+      # in a Spotlight-indexed location (i.e., directory name without dot prefix).
       #
-      # The dSYMs already contain UUID plists (written at pod install time) that map
-      # the canonical /expo-src/ prefix to the consumer's local package path.
-      # This phase just does a file copy — no dwarfdump or plist generation at build time.
-      def dsym_copy_script(product_name, xcframeworks_dir, stamp_file)
+      # @param product_name [String] The product/module name (e.g., "ExpoModulesCore")
+      # @param xcframeworks_dir [String] Path to the .xcframeworks directory (build-time var)
+      # @param script_path [String] Path to resolve-dsym-sourcemaps.js (build-time var)
+      # @param npm_package [String] NPM package name (e.g., "expo-modules-core")
+      # @param package_root [String] Path to the local package root (build-time var)
+      def dsym_resolve_script(product_name, xcframeworks_dir, script_path, npm_package, package_root)
         <<-EOS
-# Copy prebuilt dSYMs to Xcode's debug symbol output directory
+# Resolve dSYM source path mappings for prebuilt xcframeworks
 # This script is auto-generated by expo-modules-autolinking
 #
-# dSYMs are stored separately from the signed xcframework in:
-#   .xcframeworks/<config>/dSYMs/<product>/<slice>/<Product>.framework.dSYM
-#
-# UUID plists for source path remapping were written at pod install time,
-# so this phase only needs to rsync the ready-to-go dSYMs.
+# Writes UUID plists into source-tree dSYMs so lldb can remap
+# /expo-src/... paths back to local package paths.
 
-CONFIG="release"
-if echo "$GCC_PREPROCESSOR_DEFINITIONS" | grep -q "DEBUG=1"; then
-  CONFIG="debug"
-fi
+STAMP_FILE="$DERIVED_FILE_DIR/expo-dsym-resolve-#{product_name}-$CONFIGURATION.stamp"
 
-DSYMS_BASE="#{xcframeworks_dir}/$CONFIG/dSYMs/#{product_name}"
-STAMP_FILE="$DERIVED_FILE_DIR/expo-dsym-copy-#{product_name}-$CONFIGURATION.stamp"
+# Find dSYMs inside the source-tree xcframework (all slices)
+XCFW_PATH="#{xcframeworks_dir}/current/#{product_name}.xcframework"
 
-# Early exit if no dSYMs directory exists
-if [ ! -d "$DSYMS_BASE" ]; then
-  mkdir -p "$(dirname "$STAMP_FILE")"
-  touch "$STAMP_FILE"
-  exit 0
-fi
-
-# Find the matching slice based on PLATFORM_NAME
-# Slice directories are named like Debug-iphoneos, Release-iphonesimulator, etc.
-DSYM_SOURCE=""
-for SLICE_DIR in "$DSYMS_BASE"/*/; do
-  SLICE_NAME=$(basename "$SLICE_DIR")
-  if echo "$SLICE_NAME" | grep -qi "$PLATFORM_NAME"; then
-    DSYM_FILE="$SLICE_DIR/#{product_name}.framework.dSYM"
-    if [ -d "$DSYM_FILE" ]; then
-      DSYM_SOURCE="$DSYM_FILE"
-      break
+if [ -d "$XCFW_PATH" ]; then
+  FOUND_DSYM=0
+  for DSYM_DIR in "$XCFW_PATH"/*/dSYMs; do
+    if [ -d "$DSYM_DIR/#{product_name}.framework.dSYM" ]; then
+      if [ $FOUND_DSYM -eq 0 ]; then
+        . "$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh"
+        FOUND_DSYM=1
+      fi
+      "$NODE_BINARY" "#{script_path}" \\
+        -d "$DSYM_DIR" \\
+        -m "#{product_name}" \\
+        -n "#{npm_package}" \\
+        -r "#{package_root}"
     fi
-  fi
-done
-
-# Copy the dSYM to the build output directory if found
-if [ -n "$DSYM_SOURCE" ] && [ -d "$DSYM_SOURCE" ]; then
-  mkdir -p "$DWARF_DSYM_FOLDER_PATH"
-  rsync -a --delete "$DSYM_SOURCE/" "$DWARF_DSYM_FOLDER_PATH/#{product_name}.framework.dSYM/"
-
+  done
 fi
 
 # Touch stamp file for Xcode dependency tracking
@@ -543,7 +444,7 @@ touch "$STAMP_FILE"
           next unless File.directory?(xcframework_path)
 
           exclusions << info[:codegen_name]
-          Pod::UI.info "[Expo-precompiled] Found external package '#{info[:npm_package]}' with codegen module: #{info[:codegen_name]}"
+          Pod::UI.info "#{('[Expo-precompiled]').blue} Found external package '#{info[:npm_package]}' with codegen module: #{info[:codegen_name]}"
         end
 
         exclusions.uniq
@@ -574,7 +475,7 @@ touch "$STAMP_FILE"
 
         paths_string = header_search_paths.map { |p| "\"#{p}\"" }.join(' ')
 
-        Pod::UI.info "[Expo-precompiled] Adding ExpoModulesJSI header search paths to all targets"
+        Pod::UI.info "#{('[Expo-precompiled]').blue} Adding ExpoModulesJSI header search paths to all targets"
 
         # Modify xcconfig files directly - these take precedence over Xcode project settings
         pods_root = installer.sandbox.root
@@ -807,7 +708,7 @@ touch "$STAMP_FILE"
               podspec_dir = target.sandbox.pod_dir(target.name)
               framework_path = File.expand_path(framework, podspec_dir)
 
-              Pod::UI.info "[Expo-precompiled] Looking for ExpoModulesCore.xcframework at: #{framework_path}"
+              Pod::UI.info "#{('[Expo-precompiled]').blue} Looking for ExpoModulesCore.xcframework at: #{framework_path}"
               return framework_path if File.directory?(framework_path)
             end
           end

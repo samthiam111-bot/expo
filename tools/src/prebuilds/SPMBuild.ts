@@ -178,13 +178,53 @@ const buildXcodeBuildArgs = (
 
   // Remap absolute build paths to a canonical /expo-src prefix in DWARF debug info.
   // This ensures dSYMs are portable across machines — the canonical prefix is resolved
-  // to the consumer's local package path at pod install time via UUID plists.
+  // to the consumer's local package path at build time via UUID plists.
   // Two separate flags are needed for Swift targets:
   //   -debug-prefix-map: remaps paths in Swift's own DWARF output
   //   -Xcc -fdebug-prefix-map: remaps paths in Clang calls made by Swift (bridging headers, etc.)
   const repoRoot = getExpoRepositoryRootDir();
+
+  // Per-target debug prefix maps: remap staging directory paths to canonical source paths.
+  // During the SPM build, source files are symlinked into a staging directory:
+  //   <buildPath>/.build/source/<pkgName>/<productName>/<targetName>/
+  // The compiler records this staging path (not the symlink target) as DW_AT_comp_dir.
+  // These maps ensure DWARF records the canonical /expo-src/<pkgPath>/<target.path>/
+  // prefix instead, so the resolve-dsym-sourcemaps.js script can map them to the
+  // consumer's local package paths.
+  const stagingBase = path.resolve(
+    pkg.buildPath,
+    '.build',
+    'source',
+    pkg.packageName,
+    product.name
+  );
+  const cTargetPrefixMaps: string[] = [];
+  const swiftTargetPrefixMaps: string[] = [];
+  for (const target of product.targets) {
+    // Skip binary framework targets (no source files to compile)
+    if (target.type === 'framework') continue;
+    // Skip targets with generated source in .build/ (not from actual package source)
+    if (target.path.startsWith('.build/')) continue;
+
+    const stagingTargetPath = path.join(stagingBase, target.name);
+    const canonicalPath = `/expo-src/packages/${pkg.packageName}/${target.path}`;
+
+    // Trailing '/' ensures directory-boundary matching — without it, a target named
+    // "ExpoModulesCore" would also match "ExpoModulesCore_ios_objc" as a string prefix.
+    cTargetPrefixMaps.push(`-fdebug-prefix-map=${stagingTargetPath}/=${canonicalPath}/`);
+    swiftTargetPrefixMaps.push(`-debug-prefix-map ${stagingTargetPath}/=${canonicalPath}/`);
+  }
+
+  // General repo root map as catch-all
   const debugPrefixMap = `-fdebug-prefix-map=${repoRoot}=/expo-src`;
   const swiftDebugPrefixMap = `-debug-prefix-map ${repoRoot}=/expo-src`;
+
+  // Build compound flag strings: repo root map FIRST (catch-all), per-target maps LAST (override).
+  // Clang applies -fdebug-prefix-map in reverse order (last on command line wins), so the
+  // more specific per-target maps must come last to take priority over the general repo root map.
+  const allCPrefixMaps = [debugPrefixMap, ...cTargetPrefixMaps].join(' ');
+  const allSwiftPrefixMaps = [swiftDebugPrefixMap, ...swiftTargetPrefixMaps].join(' ');
+  const allXccPrefixMaps = [debugPrefixMap, ...cTargetPrefixMaps].map((m) => `-Xcc ${m}`).join(' ');
 
   return [
     '-scheme',
@@ -198,10 +238,10 @@ const buildXcodeBuildArgs = (
     'SKIP_INSTALL=NO',
     ...(containsSwiftTargets ? ['BUILD_LIBRARY_FOR_DISTRIBUTION=YES'] : []),
     'DEBUG_INFORMATION_FORMAT=dwarf-with-dsym',
-    `OTHER_CFLAGS=$(inherited) ${debugPrefixMap}`,
-    `OTHER_CPLUSPLUSFLAGS=$(inherited) ${debugPrefixMap}`,
+    `OTHER_CFLAGS=$(inherited) ${allCPrefixMaps}`,
+    `OTHER_CPLUSPLUSFLAGS=$(inherited) ${allCPrefixMaps}`,
     ...(containsSwiftTargets
-      ? [`OTHER_SWIFT_FLAGS=$(inherited) ${swiftDebugPrefixMap} -Xcc ${debugPrefixMap}`]
+      ? [`OTHER_SWIFT_FLAGS=$(inherited) ${allSwiftPrefixMaps} ${allXccPrefixMaps}`]
       : []),
     'build',
   ];

@@ -1261,13 +1261,11 @@ const verifyAsync = async (
   }
 
   // Compute the dSYMs base path for dSYM verification
-  const dsymsBasePath = Frameworks.getDsymsPath(pkg.path, product.name, buildFlavor);
 
   const sliceReports = await verifyAllSlices(
     pkg,
     slices,
     xcframeworkPath,
-    dsymsBasePath,
     options,
     dependencyXcframeworkPaths
   );
@@ -1352,7 +1350,6 @@ const verifyAllSlices = async (
   pkg: SPMPackageSource,
   slices: XCFrameworkSlice[],
   xcframeworkPath: string,
-  dsymsBasePath: string,
   options?: VerifyOptions,
   dependencyXcframeworkPaths: string[] = []
 ): Promise<SliceVerificationReport[]> => {
@@ -1364,7 +1361,6 @@ const verifyAllSlices = async (
     const report = await verifySlice(
       slice,
       xcframeworkPath,
-      dsymsBasePath,
       spinner,
       options,
       dependencyXcframeworkPaths
@@ -1408,7 +1404,6 @@ const collectSliceIssues = (report: SliceVerificationReport): string[] => {
 const verifySlice = async (
   slice: XCFrameworkSlice,
   xcframeworkPath: string,
-  dsymsBasePath: string,
   spinner: AsyncSpinner,
   options?: VerifyOptions,
   dependencyXcframeworkPaths: string[] = []
@@ -1463,11 +1458,11 @@ const verifySlice = async (
 
   if (!options?.skipDsymCheck) {
     spinner.info('Verifying dSYM...');
-    dsymPresent = verifyDsymPresence(dsymsBasePath, slice);
+    dsymPresent = verifyDsymPresence(xcframeworkPath, slice);
 
     if (dsymPresent.success) {
-      dsymUuidMatch = verifyDsymUuidMatch(dsymsBasePath, slice);
-      dsymDebugPrefixMapping = verifyDsymDebugPrefixMapping(dsymsBasePath, slice);
+      dsymUuidMatch = verifyDsymUuidMatch(xcframeworkPath, slice);
+      dsymDebugPrefixMapping = verifyDsymDebugPrefixMapping(xcframeworkPath, slice);
     }
   }
 

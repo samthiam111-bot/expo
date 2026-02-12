@@ -182,25 +182,6 @@ export const Frameworks = {
       `${productName}.xcframework`
     );
   },
-
-  /**
-   * Returns the path to the dSYMs directory for the given product.
-   * dSYMs are stored separately from the xcframework to avoid code signing conflicts —
-   * the xcframework is signed as a clean bundle, and dSYMs are kept as plain unsigned
-   * directory bundles that can be freely modified (e.g., to add UUID plists for source
-   * path remapping at pod install time).
-   * @param pkgPath Package path
-   * @param productName SPM product name
-   * @param buildType Build flavor
-   * @returns Path to the dSYMs directory
-   */
-  getDsymsPath: (pkgPath: string, productName: string, buildType: BuildFlavor): string => {
-    return path.join(
-      Frameworks.getFrameworksOutputPath(pkgPath, buildType),
-      'dSYMs',
-      `${productName}`
-    );
-  },
 };
 
 /**
@@ -480,7 +461,13 @@ const copySPMDependencyXCFrameworksAsync = async (
 
     const args = [
       `-create-xcframework`,
-      ...depFrameworks.flatMap((f) => ['-framework', f.frameworkPath]),
+      ...depFrameworks.flatMap((f) => {
+        const result = ['-framework', f.frameworkPath];
+        if (f.debugSymbolsPath) {
+          result.push('-debug-symbols', f.debugSymbolsPath);
+        }
+        return result;
+      }),
       `-output`,
       destXCFrameworkPath,
     ];
@@ -748,13 +735,20 @@ const composeFrameworkWithXCodeAsync = async (
   await fs.remove(outputFrameworkPath);
   await fs.mkdirp(path.dirname(outputFrameworkPath));
 
-  // Run XCode build command with formatted output
-  // Do NOT pass -debug-symbols here — dSYMs are stored separately from the xcframework
-  // so that the xcframework can be code-signed without including mutable debug symbols.
-  // dSYMs are copied to a sibling dSYMs/ directory after xcframework creation.
+  // Run XCode build command with formatted output.
+  // dSYMs are embedded inside the xcframework via -debug-symbols so that Xcode
+  // copies them alongside the framework slices. Source path remapping plists
+  // (UUID plists) are written into these dSYMs at build time by a script phase,
+  // enabling lldb to resolve /expo-src/ paths back to local package paths.
   const args = [
     `-create-xcframework`,
-    ...frameworks.flatMap((framework) => ['-framework', framework.frameworkPath]),
+    ...frameworks.flatMap((framework) => {
+      const result = ['-framework', framework.frameworkPath];
+      if (fs.existsSync(framework.symbolsBundlePath)) {
+        result.push('-debug-symbols', framework.symbolsBundlePath);
+      }
+      return result;
+    }),
     `-output`,
     outputFrameworkPath,
   ];
@@ -773,32 +767,6 @@ const composeFrameworkWithXCodeAsync = async (
   }
 
   spinner.succeed(`Built framework at ${path.relative(pkg.path, outputFrameworkPath)}`);
-
-  // Copy dSYMs to a sibling directory alongside the xcframework.
-  // Structure: .xcframeworks/<buildType>/dSYMs/<productName>/<sliceName>/<Product>.framework.dSYM
-  // This keeps them separate from the signed xcframework while maintaining per-slice organization.
-  const buildType = frameworks[0]?.buildType;
-  if (buildType) {
-    const dsymsOutputPath = Frameworks.getDsymsPath(pkg.path, product.name, buildType);
-    await fs.remove(dsymsOutputPath);
-    await fs.mkdirp(dsymsOutputPath);
-
-    for (const framework of frameworks) {
-      if (await fs.pathExists(framework.symbolsBundlePath)) {
-        // Derive a slice name from the framework path (e.g., iphoneos, iphonesimulator)
-        const buildProductsDir = path.dirname(path.dirname(framework.frameworkPath));
-        const sliceName = path.basename(buildProductsDir);
-        const sliceDsymPath = path.join(dsymsOutputPath, sliceName);
-        await fs.mkdirp(sliceDsymPath);
-        await fs.copy(
-          framework.symbolsBundlePath,
-          path.join(sliceDsymPath, path.basename(framework.symbolsBundlePath))
-        );
-      }
-    }
-
-    spinner.succeed(`Copied dSYMs to ${path.relative(pkg.path, dsymsOutputPath)}`);
-  }
 
   // Find slices in the composed XCFramework - they are the folders inside the .xcframework
   // remember to return only directories, not files - and return their names.
