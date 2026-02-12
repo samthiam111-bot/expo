@@ -22,6 +22,7 @@
 - Retrieve default route's IP address concurrently ([#42923](https://github.com/expo/expo/pull/42923) by [@kitten](https://github.com/kitten))
 - Replace `require-from-string` with `@expo/require-utils` ([#42884](https://github.com/expo/expo/pull/42884) by [@kitten](https://github.com/kitten))
 - Refactor env loading and reloading to unified logic and don't overwrite original system values ([#43038](https://github.com/expo/expo/pull/43038) by [@kitten](https://github.com/kitten))
+- Only encode the QR code's URL params partially to save on size ([#42911](https://github.com/expo/expo/pull/42911) by [@kitten](https://github.com/kitten))
 
 ## 55.0.7 — 2026-02-08
 
