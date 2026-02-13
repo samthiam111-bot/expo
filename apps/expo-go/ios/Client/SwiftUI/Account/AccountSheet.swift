@@ -6,6 +6,7 @@ import UIKit
 struct AccountSheet: View {
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject var viewModel: HomeViewModel
+  @StateObject private var loginViewModel = LoginViewModel()
 
   var body: some View {
     VStack(spacing: 0) {
@@ -15,16 +16,11 @@ struct AccountSheet: View {
         userAccountSelector
           .padding(.horizontal, 16)
       } else {
-        Spacer()
-        Image("expo-go-logo")
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: 180)
-          .foregroundColor(.expoBlue)
-        Spacer()
-
-        loginSignupCard
-          .padding(.horizontal, 16)
+        ScrollView {
+          loginForm
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+        }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,6 +51,35 @@ struct AccountSheet: View {
     }
   }
 
+  @ViewBuilder
+  private var loginForm: some View {
+    switch loginViewModel.phase {
+    case .credentials:
+      LoginView(
+        loginViewModel: loginViewModel,
+        onLoginSuccess: handleLoginSuccess,
+        onSSO: {
+          await viewModel.ssoLogin()
+        },
+        onSignUp: {
+          await viewModel.signUp()
+        }
+      )
+    case .twoFactor:
+      TwoFactorView(
+        loginViewModel: loginViewModel,
+        onVerifySuccess: handleLoginSuccess
+      )
+    }
+  }
+
+  private func handleLoginSuccess(_ sessionSecret: String) async {
+    await viewModel.authService.completeLogin(with: sessionSecret)
+    if let account = viewModel.selectedAccount {
+      viewModel.dataService.startPolling(accountName: account.name)
+    }
+  }
+
   private var userAccountSelector: some View {
     VStack(spacing: 0) {
       ScrollView {
@@ -79,7 +104,7 @@ struct AccountSheet: View {
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
       viewModel.signOut()
     } label: {
-      Text("Logout")
+      Text("Log out")
         .font(.headline)
         .fontWeight(.bold)
         .foregroundColor(.white)
@@ -89,67 +114,6 @@ struct AccountSheet: View {
     .background(Color.black)
     .cornerRadius(12)
     }
-  }
-
-  private var loginSignupCard: some View {
-    VStack(spacing: 16) {
-      Text("Log in or create an account to access your projects, view local development servers, and more.")
-        .font(.system(size: 16))
-        .foregroundColor(.secondary)
-
-      VStack(spacing: 8) {
-        signInButton
-        signUpButton
-      }
-    }
-  }
-
-  private var signInButton: some View {
-    Button {
-      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      Task {
-        await viewModel.signIn()
-      }
-    } label: {
-      HStack(spacing: 8) {
-        if viewModel.isAuthenticating {
-          ProgressView()
-            .tint(.white)
-            .scaleEffect(0.8)
-            .transition(.scale.combined(with: .opacity))
-        }
-
-        Text("Log In")
-          .font(.headline)
-          .fontWeight(.semibold)
-      }
-      .foregroundColor(.white)
-      .frame(maxWidth: .infinity)
-      .padding(.vertical, 12)
-      .animation(.easeInOut(duration: 0.2), value: viewModel.isAuthenticating)
-    }
-    .background(Color.black)
-    .cornerRadius(12)
-    .disabled(viewModel.isAuthenticating)
-  }
-
-  private var signUpButton: some View {
-    Button {
-      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      Task {
-        await viewModel.signUp()
-      }
-    } label: {
-      Text("Sign Up")
-        .font(.headline)
-        .fontWeight(.semibold)
-        .foregroundColor(.black.opacity(0.7))
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-    }
-    .background(Color.white)
-    .cornerRadius(12)
-    .disabled(viewModel.isAuthenticating)
   }
 
   private func accountRow(account: Account) -> some View {

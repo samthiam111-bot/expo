@@ -105,6 +105,17 @@ class HomeViewModel: ObservableObject {
     }
   }
 
+  func ssoLogin() async {
+    do {
+      try await authService.ssoLogin()
+      if let account = selectedAccount {
+        dataService.startPolling(accountName: account.name)
+      }
+    } catch {
+      showError("Failed to sign in with SSO")
+    }
+  }
+
   func signOut() {
     authService.signOut()
     clearRecentlyOpenedApps()

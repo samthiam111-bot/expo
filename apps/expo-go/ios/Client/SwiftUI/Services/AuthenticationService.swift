@@ -72,11 +72,8 @@ class AuthenticationService: ObservableObject {
     isAuthenticating = true
     defer { isAuthenticating = false }
 
-    if let sessionSecret = try await performAuthentication(isSignUp: false) {
-      UserDefaults.standard.set(sessionSecret, forKey: sessionKey)
-      await APIClient.shared.setSession(sessionSecret)
-      isAuthenticated = true
-      await loadUserInfo()
+    if let sessionSecret = try await performAuthentication(path: "login") {
+      await completeLogin(with: sessionSecret)
     }
   }
 
@@ -84,12 +81,25 @@ class AuthenticationService: ObservableObject {
     isAuthenticating = true
     defer { isAuthenticating = false }
 
-    if let sessionSecret = try await performAuthentication(isSignUp: true) {
-      UserDefaults.standard.set(sessionSecret, forKey: sessionKey)
-      await APIClient.shared.setSession(sessionSecret)
-      isAuthenticated = true
-      await loadUserInfo()
+    if let sessionSecret = try await performAuthentication(path: "signup") {
+      await completeLogin(with: sessionSecret)
     }
+  }
+
+  func ssoLogin() async throws {
+    isAuthenticating = true
+    defer { isAuthenticating = false }
+
+    if let sessionSecret = try await performAuthentication(path: "sso-login") {
+      await completeLogin(with: sessionSecret)
+    }
+  }
+
+  func completeLogin(with sessionSecret: String) async {
+    UserDefaults.standard.set(sessionSecret, forKey: sessionKey)
+    await APIClient.shared.setSession(sessionSecret)
+    isAuthenticated = true
+    await loadUserInfo()
   }
 
   func signOut() {
@@ -108,16 +118,15 @@ class AuthenticationService: ObservableObject {
     UserDefaults.standard.set(accountId, forKey: selectedAccountKey)
   }
 
-  private func performAuthentication(isSignUp: Bool) async throws -> String? {
+  private func performAuthentication(path: String) async throws -> String? {
     let scheme = try getURLScheme()
     let websiteOrigin = APIClient.shared.websiteOrigin
 
     return try await withCheckedThrowingContinuation { continuation in
-      let authType = isSignUp ? "signup" : "login"
       let redirectBase = "\(scheme)://auth"
 
       guard let encodedRedirectURI = redirectBase.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-            let url = URL(string: "\(websiteOrigin)/\(authType)?confirm_account=1&app_redirect_uri=\(encodedRedirectURI)") else {
+            let url = URL(string: "\(websiteOrigin)/\(path)?confirm_account=1&app_redirect_uri=\(encodedRedirectURI)") else {
         continuation.resume(throwing: ExpoGoError.invalidURL)
         return
       }
