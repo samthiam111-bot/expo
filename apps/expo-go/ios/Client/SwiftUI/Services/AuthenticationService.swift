@@ -142,7 +142,7 @@ class AuthenticationService: ObservableObject {
       }
 
       session.presentationContextProvider = presentationContext
-      session.prefersEphemeralWebBrowserSession = true
+      session.prefersEphemeralWebBrowserSession = false
       session.start()
     }
   }
