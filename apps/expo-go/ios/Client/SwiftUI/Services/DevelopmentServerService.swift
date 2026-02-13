@@ -23,7 +23,9 @@ class DevelopmentServerService: ObservableObject {
   func startDiscovery() {
     stopDiscovery()
     loadCachedRemoteSessions()
+    #if targetEnvironment(simulator)
     startDiscoveryLoop()
+    #endif
     startRemoteRefreshLoop()
   }
 
