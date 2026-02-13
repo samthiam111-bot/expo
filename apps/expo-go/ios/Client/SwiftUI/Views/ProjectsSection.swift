@@ -8,6 +8,8 @@ struct ProjectsAndSnacksSection: View {
   @State private var loadingProjectId: String?
   @State private var loadingSnackId: String?
   @State private var isLoadingDemoProject = false
+  @State private var showSkeleton = true
+  @State private var skeletonMinElapsed = false
 
   private var hasProjects: Bool { !viewModel.projects.isEmpty }
   private var hasSnacks: Bool { !viewModel.snacks.isEmpty }
@@ -17,14 +19,14 @@ struct ProjectsAndSnacksSection: View {
     VStack(alignment: .leading, spacing: 12) {
       SectionHeader(title: "PROJECTS")
 
-      if isLoadingData && !hasProjects && !hasSnacks {
+      if showSkeleton {
         // Loading state
         VStack(spacing: 6) {
           ForEach(0..<3, id: \.self) { _ in
             ProjectSkeletonRow()
           }
         }
-      } else if !hasProjects && !hasSnacks && !isLoadingData {
+      } else if !hasProjects && !hasSnacks {
         // Demo project card
         Button {
           startDemoProject()
@@ -140,6 +142,31 @@ struct ProjectsAndSnacksSection: View {
         loadingProjectId = nil
         loadingSnackId = nil
         isLoadingDemoProject = false
+      }
+    }
+    .onAppear {
+      startSkeletonTimer()
+    }
+    .onChange(of: isLoadingData) { loading in
+      if !loading && skeletonMinElapsed {
+        showSkeleton = false
+      }
+    }
+  }
+
+  private func startSkeletonTimer() {
+    // If data is already loaded, skip the skeleton entirely
+    if hasProjects || hasSnacks || !isLoadingData {
+      showSkeleton = false
+      skeletonMinElapsed = true
+      return
+    }
+
+    Task {
+      try? await Task.sleep(nanoseconds: 250_000_000)
+      skeletonMinElapsed = true
+      if !isLoadingData {
+        showSkeleton = false
       }
     }
   }
