@@ -10,9 +10,10 @@ struct AccountSheet: View {
 
   var body: some View {
     NavigationStack {
-      Group {
+      ZStack {
         if viewModel.isAuthenticated {
           userAccountSelector
+            .ignoresSafeArea(.keyboard)
             .padding(.horizontal, 16)
             .transition(.opacity)
         } else {
