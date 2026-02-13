@@ -48,7 +48,8 @@ struct Lesson: Identifiable {
   /// Dependencies required by the lesson (uses "*" for preloaded modules)
   static let snackDependencies: [String: [String: Any]] = [
     "react-native-safe-area-context": ["version": "*"],
-    "@expo/vector-icons": ["version": "*"]
+    "@expo/vector-icons": ["version": "*"],
+    "@shopify/react-native-skia": ["version": "*"]
   ]
 }
 
@@ -515,6 +516,61 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 14,
     color: '#666',
+  },
+});
+"""
+    ),
+
+    // Lesson 7: Drawing with Skia
+    Lesson(
+      id: 7,
+      title: "2D Graphics",
+      icon: "paintpalette.fill",
+      description: "Draw on a `<Canvas>` using shape components like `<Circle>`, `<Rect>`, and `<RoundedRect>`. Nest a `<LinearGradient>` inside any shape for smooth color blends. Try changing the gradient `colors`, moving shapes with `cx`/`cy`, adjusting `opacity`, or adding more `<Circle>` elements.",
+      shortDescription: "Draw shapes and gradients",
+      appCode: """
+import Lesson from './lesson-files/Lesson';
+import { View, useWindowDimensions, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Canvas, Circle, RoundedRect, LinearGradient, vec } from '@shopify/react-native-skia';
+
+function Drawing() {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const size = width - 32;
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <Canvas style={{ width: size, height: size }}>
+        <RoundedRect x={0} y={0} width={size} height={size} r={24} color="#1a1a2e" />
+        <Circle cx={size / 2} cy={size / 2} r={100}>
+          <LinearGradient
+            start={vec(size / 2 - 100, size / 2 - 100)}
+            end={vec(size / 2 + 100, size / 2 + 100)}
+            colors={['#e94560', '#0f3460']}
+          />
+        </Circle>
+        <Circle cx={size * 0.25} cy={size * 0.3} r={30} color="#4ECDC4" opacity={0.7} />
+        <Circle cx={size * 0.78} cy={size * 0.65} r={40} color="#FFD93D" opacity={0.6} />
+      </Canvas>
+    </View>
+  );
+}
+
+export default function App() {
+  return (
+    <Lesson>
+      <Drawing />
+    </Lesson>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
 });
 """
