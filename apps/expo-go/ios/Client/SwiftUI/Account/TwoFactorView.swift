@@ -12,10 +12,13 @@ struct TwoFactorView: View {
     VStack(alignment: .leading, spacing: 16) {
       if loginViewModel.isUsingRecoveryCode {
         recoveryCodeContent
+          .transition(.opacity)
       } else {
         otpContent
+          .transition(.opacity)
       }
     }
+    .animation(.default, value: loginViewModel.isUsingRecoveryCode)
     .onAppear {
       isCodeFocused = true
     }
@@ -42,16 +45,23 @@ struct TwoFactorView: View {
       verifyButton
       cancelButton
 
-      (Text("Lost access to your 2FA device? ")
-        .foregroundColor(.secondary)
-      + Text("Enter a recovery code")
-        .foregroundColor(.accentColor))
-        .font(.callout)
-        .onTapGesture {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Lost access to your 2FA device?")
+          .font(.callout)
+          .foregroundColor(.secondary)
+
+        Button {
           loginViewModel.isUsingRecoveryCode = true
           loginViewModel.otpCode = ""
           loginViewModel.errorMessage = nil
+        } label: {
+          Text("Enter a recovery code.")
+            .font(.callout)
+            .foregroundColor(.accentColor)
         }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+      }
     }
   }
 
@@ -97,10 +107,12 @@ struct TwoFactorView: View {
         loginViewModel.otpCode = ""
         loginViewModel.errorMessage = nil
       } label: {
-        Text("Use one-time password instead")
+        Text("Use one-time password instead.")
           .font(.callout)
           .foregroundColor(.accentColor)
       }
+      .padding(.vertical, 8)
+      .contentShape(Rectangle())
     }
   }
 
@@ -110,8 +122,8 @@ struct TwoFactorView: View {
         .keyboardType(.numberPad)
         .textContentType(.oneTimeCode)
         .focused($isCodeFocused)
-        .opacity(0.01)
-        .frame(width: 1, height: 1)
+        .foregroundColor(.clear)
+        .tint(.clear)
         .onChange(of: loginViewModel.otpCode) { newValue in
           let filtered = String(newValue.filter { $0.isNumber }.prefix(6))
           if filtered != newValue {
@@ -137,10 +149,7 @@ struct TwoFactorView: View {
 
         digitGroup(startIndex: 3)
       }
-      .contentShape(Rectangle())
-      .onTapGesture {
-        isCodeFocused = true
-      }
+      .allowsHitTesting(false)
     }
   }
 

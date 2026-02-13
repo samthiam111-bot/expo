@@ -1,6 +1,7 @@
 //  Copyright © 2025 650 Industries. All rights reserved.
 
 import Foundation
+import SwiftUI
 
 @MainActor
 class LoginViewModel: ObservableObject {
@@ -112,7 +113,9 @@ class LoginViewModel: ObservableObject {
   }
 
   func resetToCredentials() {
-    phase = .credentials
+    withAnimation {
+      phase = .credentials
+    }
     otpCode = ""
     errorMessage = nil
     isUsingRecoveryCode = false
@@ -126,7 +129,9 @@ class LoginViewModel: ObservableObject {
       secondFactorDevices = devices
       savedPassword = password
       password = ""
-      phase = .twoFactor
+      withAnimation {
+        phase = .twoFactor
+      }
       errorMessage = nil
       return nil
     case .invalidCredentials(let message):

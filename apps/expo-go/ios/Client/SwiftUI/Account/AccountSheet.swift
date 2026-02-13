@@ -15,14 +15,18 @@ struct AccountSheet: View {
       if viewModel.isAuthenticated {
         userAccountSelector
           .padding(.horizontal, 16)
+          .transition(.opacity)
       } else {
         ScrollView {
           loginForm
+            .animation(.default, value: loginViewModel.phase)
             .padding(.horizontal, 16)
             .padding(.top, 16)
         }
+        .transition(.opacity)
       }
     }
+    .animation(.default, value: viewModel.isAuthenticated)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.expoSystemBackground)
   }
@@ -65,11 +69,13 @@ struct AccountSheet: View {
           await viewModel.signUp()
         }
       )
+      .transition(.opacity)
     case .twoFactor:
       TwoFactorView(
         loginViewModel: loginViewModel,
         onVerifySuccess: handleLoginSuccess
       )
+      .transition(.opacity)
     }
   }
 
@@ -103,6 +109,7 @@ struct AccountSheet: View {
     Button {
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
       viewModel.signOut()
+      dismiss()
     } label: {
       Text("Log out")
         .font(.headline)
