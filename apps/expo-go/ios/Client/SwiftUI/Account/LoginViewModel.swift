@@ -1,7 +1,7 @@
 //  Copyright © 2025 650 Industries. All rights reserved.
 
+import Combine
 import Foundation
-import SwiftUI
 
 @MainActor
 class LoginViewModel: ObservableObject {
@@ -38,7 +38,6 @@ class LoginViewModel: ObservableObject {
 
     isLoading = true
     errorMessage = nil
-    defer { isLoading = false }
 
     let request = LoginRequest(
       username: username.trimmingCharacters(in: .whitespaces),
@@ -55,6 +54,7 @@ class LoginViewModel: ObservableObject {
     } catch let error as LoginError {
       return handleLoginError(error)
     } catch {
+      isLoading = false
       errorMessage = error.localizedDescription
       return nil
     }
@@ -65,7 +65,6 @@ class LoginViewModel: ObservableObject {
 
     isLoading = true
     errorMessage = nil
-    defer { isLoading = false }
 
     let request = LoginRequest(
       username: username.trimmingCharacters(in: .whitespaces),
@@ -80,6 +79,7 @@ class LoginViewModel: ObservableObject {
       )
       return response.data.sessionSecret
     } catch let error as LoginError {
+      isLoading = false
       switch error {
       case .invalidCredentials(let message), .apiError(let message):
         errorMessage = message
@@ -90,6 +90,7 @@ class LoginViewModel: ObservableObject {
       }
       return nil
     } catch {
+      isLoading = false
       errorMessage = error.localizedDescription
       return nil
     }
@@ -113,9 +114,8 @@ class LoginViewModel: ObservableObject {
   }
 
   func resetToCredentials() {
-    withAnimation {
-      phase = .credentials
-    }
+    phase = .credentials
+    isLoading = false
     otpCode = ""
     errorMessage = nil
     isUsingRecoveryCode = false
@@ -124,14 +124,13 @@ class LoginViewModel: ObservableObject {
   }
 
   private func handleLoginError(_ error: LoginError) -> String? {
+    isLoading = false
     switch error {
     case .otpRequired(let devices, _):
       secondFactorDevices = devices
       savedPassword = password
       password = ""
-      withAnimation {
-        phase = .twoFactor
-      }
+      phase = .twoFactor
       errorMessage = nil
       return nil
     case .invalidCredentials(let message):

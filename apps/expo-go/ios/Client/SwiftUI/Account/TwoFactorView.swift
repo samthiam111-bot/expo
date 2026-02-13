@@ -10,22 +10,6 @@ struct TwoFactorView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      if loginViewModel.isUsingRecoveryCode {
-        recoveryCodeContent
-          .transition(.opacity)
-      } else {
-        otpContent
-          .transition(.opacity)
-      }
-    }
-    .animation(.default, value: loginViewModel.isUsingRecoveryCode)
-    .onAppear {
-      isCodeFocused = true
-    }
-  }
-
-  private var otpContent: some View {
-    VStack(alignment: .leading, spacing: 16) {
       Text("Open your two-factor authentication app to view your one-time password.")
         .font(.system(size: 16))
         .foregroundColor(.secondary)
@@ -43,17 +27,22 @@ struct TwoFactorView: View {
       }
 
       verifyButton
-      cancelButton
 
       VStack(alignment: .leading, spacing: 4) {
         Text("Lost access to your 2FA device?")
           .font(.callout)
           .foregroundColor(.secondary)
 
-        Button {
-          loginViewModel.isUsingRecoveryCode = true
-          loginViewModel.otpCode = ""
-          loginViewModel.errorMessage = nil
+        NavigationLink {
+          ScrollView {
+            RecoveryCodeView(
+              loginViewModel: loginViewModel,
+              onVerifySuccess: onVerifySuccess
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+          }
+          .navigationTitle("Recovery code")
         } label: {
           Text("Enter a recovery code.")
             .font(.callout)
@@ -63,56 +52,11 @@ struct TwoFactorView: View {
         .contentShape(Rectangle())
       }
     }
-  }
-
-  private var recoveryCodeContent: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("Enter one of your recovery codes to regain access to your account.")
-        .font(.system(size: 16))
-        .foregroundColor(.secondary)
-
-      VStack(alignment: .leading, spacing: 6) {
-        Text("Recovery code")
-          .font(.callout)
-          .fontWeight(.medium)
-
-        TextField("", text: $loginViewModel.otpCode)
-          .textInputAutocapitalization(.never)
-          .disableAutocorrection(true)
-          .focused($isCodeFocused)
-          .padding()
-          .background(Color.expoSecondarySystemBackground)
-          .clipShape(RoundedRectangle(cornerRadius: BorderRadius.medium))
-          .onSubmit {
-            if loginViewModel.canSubmitOTP {
-              Task {
-                if let secret = await loginViewModel.submitOTP() {
-                  await onVerifySuccess(secret)
-                }
-              }
-            }
-          }
-          .submitLabel(.go)
-      }
-
-      if let error = loginViewModel.errorMessage {
-        ErrorBanner(message: error)
-      }
-
-      verifyButton
-      cancelButton
-
-      Button {
-        loginViewModel.isUsingRecoveryCode = false
-        loginViewModel.otpCode = ""
-        loginViewModel.errorMessage = nil
-      } label: {
-        Text("Use one-time password instead.")
-          .font(.callout)
-          .foregroundColor(.accentColor)
-      }
-      .padding(.vertical, 8)
-      .contentShape(Rectangle())
+    .onAppear {
+      loginViewModel.isUsingRecoveryCode = false
+      loginViewModel.otpCode = ""
+      loginViewModel.errorMessage = nil
+      isCodeFocused = true
     }
   }
 
@@ -206,20 +150,5 @@ struct TwoFactorView: View {
     .background(!loginViewModel.canSubmitOTP || loginViewModel.isLoading ? Color.gray.opacity(0.3) : Color.black)
     .clipShape(RoundedRectangle(cornerRadius: BorderRadius.large))
     .disabled(!loginViewModel.canSubmitOTP || loginViewModel.isLoading)
-  }
-
-  private var cancelButton: some View {
-    Button {
-      loginViewModel.resetToCredentials()
-    } label: {
-      Text("Cancel")
-        .font(.headline)
-        .fontWeight(.semibold)
-        .foregroundColor(.primary.opacity(0.7))
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-    }
-    .background(Color.expoSecondarySystemBackground)
-    .clipShape(RoundedRectangle(cornerRadius: BorderRadius.large))
   }
 }

@@ -55,7 +55,10 @@ class AuthenticationService: ObservableObject {
 
   func loadUserInfo() async {
     guard isAuthenticated else { return }
+    await fetchUserInfo()
+  }
 
+  private func fetchUserInfo() async {
     do {
       let response: MeUserActorResponse = try await APIClient.shared.request(Queries.getCurrentUser())
       user = response.data.meUserActor
@@ -89,8 +92,10 @@ class AuthenticationService: ObservableObject {
   func completeLogin(with sessionSecret: String) async {
     UserDefaults.standard.set(sessionSecret, forKey: sessionKey)
     await APIClient.shared.setSession(sessionSecret)
+    // Fetch user info before setting isAuthenticated so account data is ready
+    // when the UI switches to the account selector
+    await fetchUserInfo()
     isAuthenticated = true
-    await loadUserInfo()
   }
 
   func signOut() {

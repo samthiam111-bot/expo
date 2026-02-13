@@ -12,7 +12,6 @@ struct LoginView: View {
   @FocusState private var focusedField: Field?
   @State private var isPasswordVisible = false
   @State private var safariURL: URL?
-
   private enum Field {
     case username, password
   }
