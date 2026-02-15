@@ -14,11 +14,19 @@ When a user asks you to add SPM prebuild support for an external package, you ne
 
 ```
 packages/external/
-├── claude.md                    # This file (instructions for you)
+├── README.md                         # This file (instructions for you)
 ├── react-native-svg/
-│   └── spm.config.json          # Example: SPM config for react-native-svg
-└── react-native-screens/
-    └── spm.config.json          # Example: SPM config for react-native-screens
+│   └── spm.config.json
+├── react-native-screens/
+│   └── spm.config.json
+├── react-native-gesture-handler/
+│   └── spm.config.json
+├── react-native-worklets/
+│   └── spm.config.json
+├── react-native-reanimated/
+│   └── spm.config.json
+└── lottie-react-native/
+    └── spm.config.json
 ```
 
 ## Dependency Cache
@@ -42,10 +50,10 @@ EXPO_PREBUILD_CACHE_PATH=/custom/cache/path et prebuild ...
 
 ### Cache Management Options
 
-| Flag            | Effect                                             |
-| --------------- | -------------------------------------------------- |
+| Flag | Effect |
+|------|--------|
 | `--clean-cache` | Wipes entire dependency cache (forces re-download) |
-| `--clean`       | Cleans package outputs only - does NOT touch cache |
+| `--clean` | Cleans package outputs only - does NOT touch cache |
 
 ## Key Concepts
 
@@ -63,76 +71,160 @@ The `ExternalPackage` class implements `SPMPackageSource` just like Expo's `Pack
 
 ### Step 1: Analyze the Package
 
-Before creating the config, examine the package:
+Before creating the config, examine the package thoroughly:
 
 ```bash
 # Find the package in node_modules
-ls -la node_modules/<package-name>/ios/
+ls -la node_modules/<package-name>/
 
-# Check for existing podspec
+# Check for existing podspec - note the pod name and module_name
 cat node_modules/<package-name>/*.podspec
 
-# Look for source files
-find node_modules/<package-name>/ios -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.cpp"
+# Look for ALL source files (check both ios/ and common/ directories)
+find node_modules/<package-name>/ios -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.cpp" -o -name "*.h"
+find node_modules/<package-name>/common -name "*.cpp" -o -name "*.h" 2>/dev/null
 
 # Check for resources (metal shaders, assets, etc.)
-find node_modules/<package-name>/ios -name "*.metal" -o -name "*.xcassets"
+find node_modules/<package-name>/ios -name "*.metal" -o -name "*.xcassets" -o -name "*.metallib"
 
 # Check the codegenConfig in package.json
-cat node_modules/<package-name>/package.json | grep -A 10 "codegenConfig"
+cat node_modules/<package-name>/package.json | jq '.codegenConfig'
+
+# Check for bridging headers (indicates Swift-ObjC interop)
+find node_modules/<package-name>/ios -name "*Bridging*" -o -name "*bridging*"
+
+# Check for Swift files (determines if you need Swift targets)
+find node_modules/<package-name>/ios -name "*.swift" | head -5
+
+# Check for C++ Fabric shadow nodes (common/cpp is the typical location)
+ls node_modules/<package-name>/common/cpp/ 2>/dev/null
 ```
 
-### Step 2: Determine Required Fields
+**Key things to determine:**
 
-#### Basic Config Structure
+- **Pod name**: from `s.name` in the podspec
+- **Codegen name**: from `codegenConfig.name` in package.json
+- **Language mix**: Swift? ObjC? ObjC++? C++? This determines how many targets you need
+- **Has Fabric components?**: Look for `common/cpp/` or `#ifdef RCT_NEW_ARCH_ENABLED`
+- **Has TurboModules?**: Look for codegen modules in the podspec
+- **Has resources?**: Metal shaders, xcassets, metallibs
+- **Has bridging headers?**: Indicates Swift code that uses ObjC APIs
+- **External native dependencies?**: Check podspec `s.dependency` calls
+
+### Step 2: Understand the Config Structure
+
+Every config uses the `products` format with a `$schema` reference:
 
 ```json
 {
-  "apple": {
-    "targets": [
-      {
-        "name": "<TargetName>",
-        "type": "library",
-        "sources": ["ios"],
-        "publicHeadersPath": "ios",
-        "dependencies": []
-      }
+    "$schema": "../../../tools/src/prebuilds/schemas/spm.config.schema.json",
+    "products": [
+        {
+            "name": "ProductName",
+            "podName": "pod-name",
+            "codegenName": "codegenname",
+            "platforms": ["iOS(.v15)"],
+            "externalDependencies": ["ReactNativeDependencies", "React", "Hermes"],
+            "targets": [...]
+        }
     ]
-  }
 }
 ```
 
-#### Important Fields Explained
+#### Product-Level Fields
 
-| Field                | Purpose                     | When to Use                                         |
-| -------------------- | --------------------------- | --------------------------------------------------- |
-| `name`               | Target name in SPM          | Always required. Use the module name from podspec   |
-| `type`               | `"library"` or `"binary"`   | Always `"library"` for source builds                |
-| `sources`            | Array of source directories | Paths relative to package root                      |
-| `publicHeadersPath`  | Header search path          | For Obj-C/C++ headers                               |
-| `resources`          | Array of resource configs   | For Metal shaders, assets, etc.                     |
-| `fileMapping`        | Remap file locations        | When headers need path prefixes for imports         |
-| `moduleMapContent`   | Custom module map           | For complex C++ header exposure                     |
-| `includeDirectories` | Additional include paths    | Paths relative to target's `path` field             |
-| `compilerFlags`      | Custom compiler flags       | See [Compiler Flags](#compiler-flags) section below |
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `name` | Yes | Product name — used as the xcframework name |
+| `podName` | Yes | Exact pod name from the podspec (`s.name`) |
+| `codegenName` | When has codegen | Must match `codegenConfig.name` from package.json |
+| `platforms` | No | Platform requirement, e.g., `["iOS(.v15)"]` |
+| `externalDependencies` | Yes | React Native framework dependencies (see below) |
+| `excludeFromUmbrella` | No | Headers to exclude from the auto-generated umbrella header |
+| `spmPackages` | No | Remote SPM package dependencies (see [Remote SPM Package Dependencies](#remote-spm-package-dependencies)) |
 
-#### Product-Level Fields (Required)
+**`externalDependencies`** — Almost always includes `["ReactNativeDependencies", "React", "Hermes"]`. `Hermes` is required for any package with Fabric components or TurboModules (JSI symbols come from Hermes).
 
-| Field         | Purpose             | When to Use                                                         |
-| ------------- | ------------------- | ------------------------------------------------------------------- |
-| `podName`     | CocoaPods pod name  | **REQUIRED**: The exact name of the pod from the podspec            |
-| `codegenName` | Codegen module name | When package has Fabric components. Must match `codegenConfig.name` |
+#### Target-Level Fields
 
-### Step 3: Header File Mapping
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `name` | Yes | Target name in SPM (must be unique across all targets) |
+| `type` | Yes | `"cpp"`, `"objc"`, or `"swift"` — determines the compiler used |
+| `path` | Yes | Source directory path relative to the package root in node_modules |
+| `pattern` | Yes | Glob pattern for source files, e.g., `"**/*.cpp"`, `"**/*.{m,mm}"`, `"**/*.swift"` |
+| `headerPattern` | No | Glob pattern for header files, e.g., `"**/*.h"` |
+| `moduleName` | No | Marks this target as providing codegen for the named module (for ReactCodegen exclusion) |
+| `exclude` | No | Array of glob patterns to exclude, e.g., `["**/*.macos.*", "Foo.xcodeproj/**"]` |
+| `dependencies` | No | Array of target names and external dependencies this target depends on |
+| `includeDirectories` | No | Additional header search paths relative to the target's `path` |
+| `linkedFrameworks` | No | System frameworks to link, e.g., `["UIKit", "Foundation", "QuartzCore"]` |
+| `compilerFlags` | No | Custom compiler flags (see [Compiler Flags](#compiler-flags)) |
+| `fileMapping` | No | Remap file locations for header imports (see [Header File Mapping](#step-4-header-file-mapping)) |
+| `moduleMapContent` | No | Custom module map string for C++ header exposure |
+| `resources` | No | Array of resource configs for Metal shaders, assets, etc. |
+
+### Step 3: Split Into Targets by Language (The Multi-Target Pattern)
+
+**This is the most important architectural decision.** SPM requires separate targets for different languages. Most React Native packages with Fabric support need multiple targets. Here is the standard pattern:
+
+#### Standard target breakdown
+
+| Target Name | Type | Path | Purpose |
+|-------------|------|------|---------|
+| `Foo_codegen_components` | `cpp` | `.build/codegen/.../react/renderer/components/<codegenName>` | Generated Fabric C++ props, events, shadow nodes |
+| `Foo_codegen_modules` | `objc` | `.build/codegen/.../ReactCodegen/<codegenName>` | Generated TurboModule ObjC spec |
+| `Foo_common_cpp` | `cpp` | `common/cpp` | Custom C++ shadow nodes/component descriptors (if package has them) |
+| `Foo_objc` | `objc` | `ios` | Pure ObjC files (.m) — events, helpers, categories |
+| `Foo_swift` | `swift` | `ios` | Swift source files |
+| `Foo` | `objc` | `ios` | ObjC++ (.mm) view managers + module — depends on all above |
+
+**Not every package needs all of these.** Use only what the package requires:
+
+- **No C++ shadow nodes?** Skip `_common_cpp`
+- **No Swift?** Skip `_swift` (e.g., react-native-gesture-handler, react-native-svg)
+- **No TurboModules?** May not need `_codegen_modules`
+- **Pure ObjC (no .mm)?** Can merge ObjC targets
+- **All ObjC/ObjC++ in one directory?** Can use a single target with `"**/*.{m,mm}"` pattern
+
+#### Codegen target paths
+
+The codegen targets always follow this path pattern:
+
+```
+.build/codegen/build/generated/ios/ReactCodegen/react/renderer/components/<codegenName>   ← C++ components
+.build/codegen/build/generated/ios/ReactCodegen/<codegenName>                              ← ObjC modules
+```
+
+#### Codegen target `moduleName`
+
+All codegen-related targets **must** have a `moduleName` field matching `codegenConfig.name`. This tells the build system to exclude these sources from ReactCodegen when the xcframework is used. Targets with custom C++ shadow nodes in `common/cpp/` should also have `moduleName` set.
+
+#### Dependency graph
+
+Targets form a dependency chain. The typical pattern:
+
+```
+codegen_components ←─┐
+codegen_modules ←────┤
+common_cpp ←─────────┤ (depends on codegen_components)
+objc ←───────────────┤
+swift ←──────────────┤
+main (objc) ←────────┘ (depends on ALL above)
+```
+
+The main target (usually the one named after the product) depends on all other targets and is the one that ties everything together.
+
+### Step 4: Header File Mapping
 
 When source code uses imports like `#import <modulename/subdir/Header.h>`, you need `fileMapping` to create the correct header structure:
 
 ```json
 {
-  "fileMapping": [
-    { "from": "*.h", "to": "worklets/apple/{filename}", "type": "header" },
-    { "from": "subdir/*.h", "to": "worklets/apple/subdir/{filename}", "type": "header" }
-  ]
+    "fileMapping": [
+        { "from": "*.h", "to": "worklets/apple/{filename}", "type": "header" },
+        { "from": "subdir/*.h", "to": "worklets/apple/subdir/{filename}", "type": "header" }
+    ]
 }
 ```
 
@@ -142,104 +234,252 @@ When source code uses imports like `#import <modulename/subdir/Header.h>`, you n
 - `to`: Destination path with `{filename}` placeholder
 - `type`: `"header"` for header files, `"symlink"` for directory symlinks
 
-### Step 4: Handle Codegen Exclusion
+### Step 5: Handle Swift-ObjC Interop
 
-**CRITICAL**: When a package has codegen (fabric components), you MUST add `codegenName` at the **product level** to identify the codegen module. This ensures the codegen sources are excluded from ReactCodegen when the XCFramework is used.
+Many React Native packages mix Swift and Objective-C. SPM handles this differently from CocoaPods:
 
-```json
-{
-  "products": [
-    {
-      "name": "RNSVG",
-      "podName": "RNSVG",
-      "codegenName": "rnsvg",
-      "targets": [
-        {
-          "name": "RNSVG",
-          "type": "library",
-          "sources": ["apple"],
-          "publicHeadersPath": "apple"
-        }
-      ]
-    }
-  ]
-}
-```
+- **CocoaPods** uses bridging headers (`*-Bridging-Header.h`) for ObjC-to-Swift access
+- **SPM** does NOT support bridging headers — instead, Swift and ObjC in the same target can interop automatically, or you split them into separate targets with dependencies
+
+**Common patterns:**
+
+1. **Split into `_swift` and `_objc` targets** — Swift target depends on ObjC target (or vice versa). See the lottie-react-native config for this pattern.
+2. **Exclude bridging headers from the umbrella** — Use `excludeFromUmbrella` at the product level:
+   ```json
+   {
+       "excludeFromUmbrella": ["Swift-Bridging.h", "MyPackage-Bridging-Header.h"]
+   }
+   ```
+3. **Patches may be needed** if Swift code imports the auto-generated `-Swift.h` header via a path that doesn't work in SPM.
+
+### Step 6: Handle Codegen Exclusion
+
+**CRITICAL**: When a package has codegen (Fabric components or TurboModules), codegen targets MUST have `moduleName` matching `codegenConfig.name` from package.json. This ensures the codegen sources are excluded from ReactCodegen when the xcframework is used.
 
 **How to find the codegenName:**
 
 ```bash
-# The codegenName must match codegenConfig.name in package.json
 cat node_modules/<package-name>/package.json | jq '.codegenConfig.name'
 ```
 
 ## Complete Examples
 
-### Example 1: react-native-svg (with Metal resources)
+### Example 1: ObjC-only package (react-native-gesture-handler)
+
+No Swift, no custom C++ shadow nodes — just codegen + ObjC/ObjC++ sources:
 
 ```json
 {
-  "apple": {
-    "targets": [
-      {
-        "name": "rnsvg-codegen",
-        "comment": "Identifies codegen module 'rnsvg' for exclusion from ReactCodegen",
-        "moduleName": "rnsvg"
-      },
-      {
-        "name": "RNSVG",
-        "type": "library",
-        "sources": ["apple"],
-        "publicHeadersPath": "apple",
-        "resources": [
-          {
-            "type": "process",
-            "path": "apple/Shaders.metal"
-          }
-        ],
-        "dependencies": []
-      }
+    "$schema": "../../../tools/src/prebuilds/schemas/spm.config.schema.json",
+    "products": [
+        {
+            "name": "RNGestureHandler",
+            "podName": "RNGestureHandler",
+            "codegenName": "rngesturehandler_codegen",
+            "platforms": ["iOS(.v15)"],
+            "externalDependencies": ["ReactNativeDependencies", "React", "Hermes"],
+            "targets": [
+                {
+                    "type": "cpp",
+                    "name": "RNGestureHandler_codegen_components",
+                    "moduleName": "rngesturehandler_codegen",
+                    "path": ".build/codegen/build/generated/ios/ReactCodegen/react/renderer/components/rngesturehandler_codegen",
+                    "pattern": "**/*.cpp",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies"],
+                    "includeDirectories": ["../../../.."]
+                },
+                {
+                    "type": "objc",
+                    "name": "RNGestureHandler_codegen_modules",
+                    "moduleName": "rngesturehandler_codegen",
+                    "path": ".build/codegen/build/generated/ios/ReactCodegen/rngesturehandler_codegen",
+                    "pattern": "**/*.mm",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies"],
+                    "includeDirectories": [".."]
+                },
+                {
+                    "type": "objc",
+                    "name": "RNGestureHandler",
+                    "path": "apple",
+                    "pattern": "**/*.{m,mm}",
+                    "headerPattern": "**/*.h",
+                    "exclude": ["RNGestureHandler.xcodeproj/**"],
+                    "dependencies": [
+                        "Hermes", "React", "ReactNativeDependencies",
+                        "RNGestureHandler_codegen_components",
+                        "RNGestureHandler_codegen_modules"
+                    ],
+                    "includeDirectories": [".", "../.build/codegen/build/generated/ios/ReactCodegen"],
+                    "linkedFrameworks": ["Foundation", "UIKit", "QuartzCore"],
+                    "compilerFlags": [
+                        "-include", "Foundation/Foundation.h",
+                        "-include", "UIKit/UIKit.h",
+                        "-DREACT_NATIVE_MINOR_VERSION=${REACT_NATIVE_MINOR_VERSION}"
+                    ]
+                }
+            ]
+        }
     ]
-  }
 }
 ```
 
-### Example 2: react-native-screens (with custom moduleMap for C++ headers)
+### Example 2: ObjC + custom C++ shadow nodes (react-native-svg)
+
+Adds a `_common_cpp` target for custom shadow node implementations in `common/cpp/`:
 
 ```json
 {
-  "apple": {
-    "targets": [
-      {
-        "name": "rnscreens-codegen",
-        "comment": "Identifies codegen module 'rnscreens' for exclusion from ReactCodegen",
-        "moduleName": "rnscreens"
-      },
-      {
-        "name": "RNScreens",
-        "type": "library",
-        "sources": ["ios"],
-        "publicHeadersPath": "ios",
-        "fileMapping": {
-          "common/cpp": "ios/cpp",
-          "ios": "ios"
-        },
-        "moduleMapContent": "module RNScreens {\n  header \"RNSScreenStack.h\"\n  header \"RNSFullWindowOverlay.h\"\n  export *\n}\n\nmodule RNScreensCxx {\n  header \"ios/cpp/RNSScreenStackHeaderConfigShadowNode.h\"\n  requires cplusplus\n  export *\n}",
-        "dependencies": []
-      }
+    "$schema": "../../../tools/src/prebuilds/schemas/spm.config.schema.json",
+    "products": [
+        {
+            "name": "RNSVG",
+            "podName": "RNSVG",
+            "codegenName": "rnsvg",
+            "platforms": ["iOS(.v15)"],
+            "externalDependencies": ["ReactNativeDependencies", "React", "Hermes"],
+            "targets": [
+                {
+                    "type": "cpp",
+                    "name": "RNSVG_codegen_components",
+                    "moduleName": "rnsvg",
+                    "path": ".build/codegen/build/generated/ios/ReactCodegen/react/renderer/components/rnsvg",
+                    "pattern": "**/*.cpp",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies"],
+                    "includeDirectories": ["../../../.."]
+                },
+                {
+                    "type": "objc",
+                    "name": "RNSVG_codegen_modules",
+                    "moduleName": "rnsvg",
+                    "path": ".build/codegen/build/generated/ios/ReactCodegen/rnsvg",
+                    "pattern": "**/*.mm",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies"],
+                    "includeDirectories": [".."]
+                },
+                {
+                    "type": "cpp",
+                    "name": "RNSVG_common_cpp",
+                    "moduleName": "rnsvg",
+                    "path": "common/cpp",
+                    "pattern": "**/*.cpp",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies", "RNSVG_codegen_components"],
+                    "includeDirectories": [".", "../../.build/codegen/build/generated/ios/ReactCodegen"]
+                },
+                {
+                    "type": "objc",
+                    "name": "RNSVG",
+                    "path": "apple",
+                    "pattern": "**/*.{m,mm}",
+                    "headerPattern": "**/*.h",
+                    "exclude": ["**/*.macos.*", "RNSVG.xcodeproj/**"],
+                    "dependencies": [
+                        "Hermes", "React", "ReactNativeDependencies",
+                        "RNSVG_codegen_components", "RNSVG_codegen_modules", "RNSVG_common_cpp"
+                    ],
+                    "includeDirectories": [".", "../.build/codegen/build/generated/ios/ReactCodegen"],
+                    "linkedFrameworks": ["Foundation", "UIKit", "CoreGraphics", "QuartzCore", "CoreText", "CoreImage", "Metal"],
+                    "compilerFlags": ["-include", "Foundation/Foundation.h"],
+                    "resources": [
+                        { "path": "apple/Filters/MetalCI/*.iphoneos.metallib", "rule": "copy" }
+                    ]
+                }
+            ]
+        }
     ]
-  }
 }
 ```
+
+### Example 3: Mixed Swift + ObjC + Fabric (lottie-react-native)
+
+Splits Swift and ObjC into separate targets, plus an SPM remote dependency:
+
+```json
+{
+    "$schema": "../../../tools/src/prebuilds/schemas/spm.config.schema.json",
+    "products": [
+        {
+            "name": "LottieReactNative",
+            "podName": "lottie-react-native",
+            "codegenName": "lottiereactnative",
+            "platforms": ["iOS(.v15)"],
+            "externalDependencies": ["ReactNativeDependencies", "React", "Hermes"],
+            "spmPackages": [
+                {
+                    "url": "https://github.com/airbnb/lottie-spm.git",
+                    "productName": "Lottie",
+                    "version": { "exact": "4.5.0" }
+                }
+            ],
+            "targets": [
+                {
+                    "type": "cpp",
+                    "name": "LottieReactNative_codegen_components",
+                    "moduleName": "lottiereactnative",
+                    "path": ".build/codegen/build/generated/ios/ReactCodegen/react/renderer/components/lottiereactnative",
+                    "pattern": "**/*.cpp",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies", "Hermes"],
+                    "includeDirectories": ["../../../.."]
+                },
+                {
+                    "type": "swift",
+                    "name": "LottieReactNative",
+                    "path": "ios/LottieReactNative",
+                    "pattern": "**/*.swift",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies", "Lottie", "LottieReactNative_objc"],
+                    "linkedFrameworks": ["UIKit", "Foundation"]
+                },
+                {
+                    "type": "objc",
+                    "name": "LottieReactNative_objc",
+                    "path": "ios/LottieReactNative",
+                    "pattern": "**/*.m",
+                    "headerPattern": "**/*.h",
+                    "dependencies": ["React", "ReactNativeDependencies"],
+                    "linkedFrameworks": ["UIKit", "Foundation"]
+                },
+                {
+                    "type": "objc",
+                    "name": "LottieReactNative_fabric",
+                    "path": "ios/Fabric",
+                    "pattern": "**/*.mm",
+                    "headerPattern": "**/*.h",
+                    "dependencies": [
+                        "React", "ReactNativeDependencies", "Lottie",
+                        "LottieReactNative", "LottieReactNative_codegen_components"
+                    ],
+                    "includeDirectories": ["../../.build/codegen/build/generated/ios/ReactCodegen"],
+                    "linkedFrameworks": ["UIKit", "Foundation"]
+                }
+            ]
+        }
+    ]
+}
+```
+
+**Key points for mixed Swift/ObjC packages:**
+
+- Swift and ObjC source from the same directory are split into separate targets using `pattern`
+- Swift target depends on `_objc` target for ObjC bridging (or vice versa)
+- Fabric ObjC++ (.mm) files get their own target that depends on both Swift and codegen targets
+- `Lottie` from `spmPackages` is referenced directly in target `dependencies`
 
 ## When to Create Patches
 
 You may need to create a patch (`patches/<package-name>+<version>.patch`) when:
 
-1. **Missing umbrella headers**: The package doesn't expose all needed headers
-2. **Include path issues**: Headers use incorrect relative paths
-3. **Swift/ObjC interop**: Need to add `@objc` annotations or bridging headers
-4. **Build configuration**: Package has iOS version requirements not met
+1. **`RCTFabricComponentsPlugins.h` import**: Change `#import "RCTFabricComponentsPlugins.h"` to `#import <React/RCTFabricComponentsPlugins.h>` (very common)
+2. **Podspec wrapping**: Add `try_link_with_prebuilt_xcframework` conditional (always needed)
+3. **Missing umbrella headers**: The package doesn't expose all needed headers
+4. **Include path issues**: Headers use incorrect relative paths for SPM
+5. **Swift/ObjC interop**: Need to adjust bridging header patterns for SPM
+6. **Build configuration**: Package has iOS version requirements not met
 
 ### Creating a Patch
 
@@ -255,227 +495,6 @@ The patch will be created at `patches/<package-name>+<version>.patch`.
 
 Don't make that patch manually - always make it by changing the original files and then
 run npx patch package.
-
-## Validation Checklist
-
-Before completing your work, verify:
-
-- [ ] `spm.config.json` exists at `packages/external/<package-name>/spm.config.json`
-- [ ] Target name matches the module name from the podspec
-- [ ] If package has codegen: target with `moduleName` matching `codegenConfig.name` exists
-- [ ] Source paths are correct relative to package root in node_modules
-- [ ] Resources (Metal shaders, xcassets) are included if present
-- [ ] Custom moduleMapContent is provided if C++ headers need exposure
-
-## Testing Your Configuration
-
-After creating the config:
-
-```bash
-# Build the XCFramework
-yarn et ios-build-xc react-native-svg
-
-# Verify output exists
-ls -la node_modules/react-native-svg/xcframeworks/
-
-# Test in a project
-cd apps/bare-expo/ios
-pod install
-```
-
-## Troubleshooting
-
-### "Module not found" errors
-
-- Check that `publicHeadersPath` points to the directory containing public headers
-- Verify `moduleMapContent` exports all required headers
-
-### Codegen sources still in ReactCodegen
-
-- Ensure target name contains "codegen" (e.g., `rnsvg-codegen`)
-- Verify `moduleName` exactly matches `codegenConfig.name` from package.json
-
-### Metal shader errors
-
-- Add `resources` array with `"type": "process"` for `.metal` files
-
-### C++ header visibility issues
-
-- Use `moduleMapContent` to create a custom module map
-- Use `fileMapping` to restructure source file locations
-
-### Undefined symbols for JSI (e.g., `facebook::jsi::NativeState::~NativeState()`)
-
-- Add `Hermes` to `externalDependencies` at the product level
-- Add `Hermes` to the `dependencies` array of the C++ codegen target
-- JSI symbols come from Hermes, which is required for any Fabric component codegen
-
-### Missing `RCTFabricComponentsPlugins.h` or React headers
-
-- Update imports in source code from `#import "RCTFabricComponentsPlugins.h"` to `#import <React/RCTFabricComponentsPlugins.h>`
-- This may require a patch file for the package
-
-## Code References
-
-For implementation details, examine these files:
-
-- `tools/src/prebuilds/ExternalPackage.ts` - External package discovery and resolution
-- `tools/src/prebuilds/SPMPackage.ts` - SPM Package.swift generation
-- `tools/src/prebuilds/Codegen.ts` - Codegen handling
-- `packages/expo-modules-autolinking/scripts/ios/precompiled_modules.rb` - Ruby CocoaPods integration
-
-## Pod Name Configuration
-
-The `podName` field in `spm.config.json` is **required** at the product level. This tells the Ruby code which CocoaPods pod name maps to this package:
-
-```json
-{
-  "products": [
-    {
-      "name": "RNSVG",
-      "podName": "RNSVG",
-      "targets": [...]
-    }
-  ]
-}
-```
-
-**Why this is needed**: The `try_link_with_prebuilt_xcframework` function pre-scans all `spm.config.json` files to build a lookup map from pod name → package directory. This allows it to find the xcframework at `node_modules/<package-name>/xcframeworks/<buildFlavor>/<PodName>.xcframework`.
-
-**How to find the podName:**
-
-```bash
-# Check the podspec file for the spec name
-grep "spec.name" node_modules/<package-name>/*.podspec
-```
-
-## Cross-Package Dependencies
-
-When an external package depends on another external package's xcframework (e.g., react-native-reanimated depends on react-native-worklets):
-
-### 1. Add the dependency to externalDependencies
-
-```json
-{
-  "externalDependencies": [
-    "ReactNativeDependencies",
-    "React",
-    "Hermes",
-    "RNWorklets" // <-- Add the product name (not package name)
-  ]
-}
-```
-
-### 2. The SPMPackage.ts resolves external package dependencies
-
-The `getExternalPackageByProductName` function in `ExternalPackage.ts` searches all external packages' `spm.config.json` files to find which package provides the requested product. It then returns the xcframework path.
-
-### 3. Use xcframework headers, not source headers
-
-When including headers from a dependency package, use the xcframework headers path instead of source paths:
-
-```json
-{
-  "includeDirectories": [
-    "../../../../react-native-worklets/xcframeworks/debug/RNWorklets.xcframework/ios-arm64/RNWorklets.framework/Headers"
-  ]
-}
-```
-
-**Why**: The xcframework headers include codegen headers and are properly organized. Source headers may have include paths that don't work outside their own build context.
-
-## Compiler Flags
-
-The `compilerFlags` field supports multiple formats for flexibility:
-
-### Simple Array (Applied to All Builds)
-
-```json
-{
-  "compilerFlags": ["-include", "Foundation/Foundation.h", "-DFOO=1"]
-}
-```
-
-### Structured Object with Build Variants
-
-```json
-{
-  "compilerFlags": {
-    "common": [...],   // Applied to all builds (Debug and Release)
-    "debug": [...],    // Applied only to Debug builds
-    "release": [...]   // Applied only to Release builds
-  }
-}
-```
-
-### Separate C and C++ Flags
-
-Use this when a flag should only apply to C++ (like `-fno-cxx-modules`):
-
-```json
-{
-  "compilerFlags": {
-    "common": {
-      "c": ["-DFOO=1"],
-      "cxx": ["-fno-cxx-modules", "-DFOO=1"]
-    },
-    "debug": ["-DHERMES_ENABLE_DEBUGGER=1"]
-  }
-}
-```
-
-### Common Patterns
-
-#### UIKit/Foundation includes for Objective-C
-
-When building Objective-C code that uses UIKit types (UIScreen, UIApplication, etc.) without importing UIKit explicitly:
-
-```json
-{
-  "compilerFlags": [
-    "-include",
-    "Foundation/Foundation.h",
-    "-include",
-    "UIKit/UIKit.h",
-    "-include",
-    "QuartzCore/QuartzCore.h"
-  ]
-}
-```
-
-#### Disable C++ modules for std::chrono issues
-
-If you see errors like `declaration of 'system_clock' must be imported from module 'std.chrono'`, use the cxx-specific flag:
-
-```json
-{
-  "compilerFlags": {
-    "common": {
-      "cxx": ["-fno-cxx-modules"]
-    }
-  }
-}
-```
-
-#### Debug-only Hermes debugger flag
-
-```json
-{
-  "compilerFlags": {
-    "debug": ["-DHERMES_ENABLE_DEBUGGER=1"]
-  }
-}
-```
-
-#### Escaping quotes in compiler flags
-
-For flags that contain quoted strings (like feature flags), use `\\\"` in JSON to get `\"` in the generated Swift:
-
-```json
-{
-  "compilerFlags": ["-DFEATURE_FLAGS=\\\"[FLAG1:true][FLAG2:false]\\\""]
-}
-```
 
 ## Podspec Patch Pattern for External Packages
 
@@ -497,6 +516,240 @@ Create the patch with:
 ```bash
 cd /path/to/expo
 npx patch-package <package-name>
+```
+
+## Validation Checklist
+
+Before completing your work, verify:
+
+- [ ] `spm.config.json` exists at `packages/external/<package-name>/spm.config.json`
+- [ ] `$schema` field points to `"../../../tools/src/prebuilds/schemas/spm.config.schema.json"`
+- [ ] Product `podName` matches `s.name` from the podspec
+- [ ] Product `codegenName` matches `codegenConfig.name` from package.json (if applicable)
+- [ ] All codegen targets have `moduleName` matching the codegenName
+- [ ] Target `type` is correct: `"cpp"` for C++, `"objc"` for ObjC/ObjC++, `"swift"` for Swift
+- [ ] Source `path` and `pattern` correctly select the right files
+- [ ] `exclude` patterns filter out unwanted files (xcodeproj, macOS-only, etc.)
+- [ ] Resources (Metal shaders, xcassets, metallibs) are included if present
+- [ ] Custom `moduleMapContent` is provided if C++ headers need exposure
+- [ ] `linkedFrameworks` includes all system frameworks used by the source
+- [ ] Bridging headers are in `excludeFromUmbrella` if present
+- [ ] Dependency graph between targets is correct (no circular deps)
+
+## Testing Your Configuration
+
+After creating the config:
+
+```bash
+# Build the XCFramework
+yarn et ios-build-xc react-native-svg
+
+# Verify output exists
+ls -la node_modules/react-native-svg/xcframeworks/
+
+# Test in a project
+cd apps/bare-expo/ios
+pod install
+```
+
+## Troubleshooting
+
+### "Module not found" errors
+
+- Check that header search paths in `includeDirectories` are correct
+- Verify `moduleMapContent` exports all required headers
+
+### Codegen sources still in ReactCodegen
+
+- Ensure all codegen-related targets have `moduleName` matching `codegenConfig.name`
+- This includes `_codegen_components`, `_codegen_modules`, `_common_cpp`, and the main target
+
+### Metal shader errors
+
+- Add `resources` array with `"type": "process"` for `.metal` files or `"rule": "copy"` for `.metallib` files
+
+### C++ header visibility issues
+
+- Use `moduleMapContent` to create a custom module map
+- Use `fileMapping` to restructure source file locations
+
+### Undefined symbols for JSI (e.g., `facebook::jsi::NativeState::~NativeState()`)
+
+- Add `Hermes` to `externalDependencies` at the product level
+- Add `Hermes` to the `dependencies` array of the C++ codegen target
+- JSI symbols come from Hermes, which is required for any Fabric component codegen
+
+### Missing `RCTFabricComponentsPlugins.h` or React headers
+
+- Update imports in source code from `#import "RCTFabricComponentsPlugins.h"` to `#import <React/RCTFabricComponentsPlugins.h>`
+- This almost always requires a patch file for the package
+
+### Swift bridging header errors
+
+- SPM does not support CocoaPods-style bridging headers
+- Split Swift and ObjC into separate targets with proper dependencies
+- Add bridging headers to `excludeFromUmbrella`
+- May need to patch the source to use `@import` instead of `#import` in some cases
+
+## Code References
+
+For implementation details, examine these files:
+
+- `tools/src/prebuilds/ExternalPackage.ts` - External package discovery and resolution
+- `tools/src/prebuilds/SPMPackage.ts` - SPM Package.swift generation
+- `tools/src/prebuilds/Codegen.ts` - Codegen handling
+- `packages/expo-modules-autolinking/scripts/ios/precompiled_modules.rb` - Ruby CocoaPods integration
+
+## Pod Name Configuration
+
+The `podName` field in `spm.config.json` is **required** at the product level. This tells the Ruby code which CocoaPods pod name maps to this package:
+
+```json
+{
+    "products": [
+        {
+            "name": "RNSVG",
+            "podName": "RNSVG",
+            "targets": [...]
+        }
+    ]
+}
+```
+
+**Why this is needed**: The `try_link_with_prebuilt_xcframework` function pre-scans all `spm.config.json` files to build a lookup map from pod name -> package directory. This allows it to find the xcframework at `node_modules/<package-name>/xcframeworks/<buildFlavor>/<PodName>.xcframework`.
+
+**How to find the podName:**
+
+```bash
+# Check the podspec file for the spec name
+grep "spec.name" node_modules/<package-name>/*.podspec
+```
+
+## Cross-Package Dependencies
+
+When an external package depends on another external package's xcframework (e.g., react-native-reanimated depends on react-native-worklets):
+
+### 1. Add the dependency to externalDependencies
+
+```json
+{
+    "externalDependencies": [
+        "ReactNativeDependencies",
+        "React",
+        "Hermes",
+        "RNWorklets"
+    ]
+}
+```
+
+Use the **product name** (not the package name). The product name is the `name` field from the dependency's `spm.config.json`.
+
+### 2. The SPMPackage.ts resolves external package dependencies
+
+The `getExternalPackageByProductName` function in `ExternalPackage.ts` searches all external packages' `spm.config.json` files to find which package provides the requested product. It then returns the xcframework path.
+
+### 3. Use xcframework headers, not source headers
+
+When including headers from a dependency package, use the xcframework headers path instead of source paths:
+
+```json
+{
+    "includeDirectories": [
+        "../../../../react-native-worklets/xcframeworks/debug/RNWorklets.xcframework/ios-arm64/RNWorklets.framework/Headers"
+    ]
+}
+```
+
+**Why**: The xcframework headers include codegen headers and are properly organized. Source headers may have include paths that don't work outside their own build context.
+
+## Compiler Flags
+
+The `compilerFlags` field supports multiple formats for flexibility:
+
+### Simple Array (Applied to All Builds)
+
+```json
+{
+    "compilerFlags": ["-include", "Foundation/Foundation.h", "-DFOO=1"]
+}
+```
+
+### Structured Object with Build Variants
+
+```json
+{
+    "compilerFlags": {
+        "common": [...],
+        "debug": [...],
+        "release": [...]
+    }
+}
+```
+
+### Separate C and C++ Flags
+
+Use this when a flag should only apply to C++ (like `-fno-cxx-modules`):
+
+```json
+{
+    "compilerFlags": {
+        "common": {
+            "c": ["-DFOO=1"],
+            "cxx": ["-fno-cxx-modules", "-DFOO=1"]
+        },
+        "debug": ["-DHERMES_ENABLE_DEBUGGER=1"]
+    }
+}
+```
+
+### Common Patterns
+
+#### UIKit/Foundation includes for Objective-C
+
+When building Objective-C code that uses UIKit types (UIScreen, UIApplication, etc.) without importing UIKit explicitly:
+
+```json
+{
+    "compilerFlags": [
+        "-include", "Foundation/Foundation.h",
+        "-include", "UIKit/UIKit.h",
+        "-include", "QuartzCore/QuartzCore.h"
+    ]
+}
+```
+
+#### Disable C++ modules for std::chrono issues
+
+If you see errors like `declaration of 'system_clock' must be imported from module 'std.chrono'`, use the cxx-specific flag:
+
+```json
+{
+    "compilerFlags": {
+        "common": {
+            "cxx": ["-fno-cxx-modules"]
+        }
+    }
+}
+```
+
+#### Debug-only Hermes debugger flag
+
+```json
+{
+    "compilerFlags": {
+        "debug": ["-DHERMES_ENABLE_DEBUGGER=1"]
+    }
+}
+```
+
+#### Escaping quotes in compiler flags
+
+For flags that contain quoted strings (like feature flags), use `\\\"` in JSON to get `\"` in the generated Swift:
+
+```json
+{
+    "compilerFlags": ["-DFEATURE_FLAGS=\\\"[FLAG1:true][FLAG2:false]\\\""]
+}
 ```
 
 ## Build Order for Dependent Packages
@@ -532,135 +785,52 @@ Add `spmPackages` at the product level:
 
 ```json
 {
-  "products": [
-    {
-      "name": "LottieReactNative",
-      "podName": "lottie-react-native",
-      "codegenName": "lottiereactnative",
-      "platforms": ["iOS(.v15)"],
-      "externalDependencies": ["ReactNativeDependencies", "React"],
-      "spmPackages": [
+    "products": [
         {
-          "url": "https://github.com/airbnb/lottie-spm.git",
-          "productName": "Lottie",
-          "version": { "exact": "4.5.0" }
+            "name": "LottieReactNative",
+            "podName": "lottie-react-native",
+            "codegenName": "lottiereactnative",
+            "platforms": ["iOS(.v15)"],
+            "externalDependencies": ["ReactNativeDependencies", "React"],
+            "spmPackages": [
+                {
+                    "url": "https://github.com/airbnb/lottie-spm.git",
+                    "productName": "Lottie",
+                    "version": { "exact": "4.5.0" }
+                }
+            ],
+            "targets": [
+                {
+                    "type": "swift",
+                    "name": "MyTarget",
+                    "path": "ios",
+                    "dependencies": ["React", "ReactNativeDependencies", "Lottie"]
+                }
+            ]
         }
-      ],
-      "targets": [
-        {
-          "type": "swift",
-          "name": "MyTarget",
-          "path": "ios",
-          "dependencies": ["React", "ReactNativeDependencies", "Lottie"]
-        }
-      ]
-    }
-  ]
+    ]
 }
 ```
 
 ### SPM Package Fields
 
-| Field         | Required | Description                                                                         |
-| ------------- | -------- | ----------------------------------------------------------------------------------- |
-| `url`         | Yes      | Git URL of the SPM package (e.g., `https://github.com/airbnb/lottie-spm.git`)       |
-| `productName` | Yes      | The product name exported by the package (what you import, e.g., `"Lottie"`)        |
-| `packageName` | No       | Override the package identifier. Defaults to last URL path component without `.git` |
-| `version`     | Yes      | Version requirement object (see below)                                              |
+| Field | Required | Description |
+|-------|----------|-------------|
+| `url` | Yes | Git URL of the SPM package (e.g., `https://github.com/airbnb/lottie-spm.git`) |
+| `productName` | Yes | The product name exported by the package (what you import, e.g., `"Lottie"`) |
+| `packageName` | No | Override the package identifier. Defaults to last URL path component without `.git` |
+| `version` | Yes | Version requirement object (see below) |
 
 ### Version Specifications
 
 **Always use `exact` versions for reproducible builds.** The version should match the version pinned in the upstream podspec.
 
-| Format                     | Example                        | SPM Output                                 |
-| -------------------------- | ------------------------------ | ------------------------------------------ |
-| `{ "exact": "4.5.0" }`     | Pin to exact version           | `.package(url: "...", exact: "4.5.0")`     |
-| `{ "from": "4.0.0" }`      | Semver range (>=4.0.0, <5.0.0) | `.package(url: "...", from: "4.0.0")`      |
-| `{ "branch": "main" }`     | Git branch (not recommended)   | `.package(url: "...", branch: "main")`     |
-| `{ "revision": "abc123" }` | Git commit SHA                 | `.package(url: "...", revision: "abc123")` |
-
-### Complete Example: lottie-react-native
-
-This example shows a package with:
-
-- SPM remote dependency (lottie-spm for lottie-ios)
-- Fabric codegen components (C++)
-- Swift and Objective-C sources
-- Mixed target dependencies
-
-```json
-{
-  "$schema": "../../../tools/src/prebuilds/schemas/spm.config.schema.json",
-  "products": [
-    {
-      "name": "LottieReactNative",
-      "podName": "lottie-react-native",
-      "codegenName": "lottiereactnative",
-      "platforms": ["iOS(.v15)"],
-      "externalDependencies": ["ReactNativeDependencies", "React", "Hermes"],
-      "spmPackages": [
-        {
-          "url": "https://github.com/airbnb/lottie-spm.git",
-          "productName": "Lottie",
-          "version": { "exact": "4.5.0" }
-        }
-      ],
-      "targets": [
-        {
-          "type": "cpp",
-          "name": "LottieReactNative_codegen_components",
-          "moduleName": "lottiereactnative",
-          "path": ".build/codegen/build/generated/ios/ReactCodegen/react/renderer/components/lottiereactnative",
-          "pattern": "**/*.cpp",
-          "headerPattern": "**/*.h",
-          "dependencies": ["React", "ReactNativeDependencies", "Hermes"],
-          "includeDirectories": ["../../../.."]
-        },
-        {
-          "type": "swift",
-          "name": "LottieReactNative",
-          "path": "ios/LottieReactNative",
-          "pattern": "**/*.swift",
-          "dependencies": ["React", "ReactNativeDependencies", "Lottie", "LottieReactNative_objc"],
-          "linkedFrameworks": ["UIKit", "Foundation"]
-        },
-        {
-          "type": "objc",
-          "name": "LottieReactNative_objc",
-          "path": "ios/LottieReactNative",
-          "pattern": "**/*.m",
-          "headerPattern": "**/*.h",
-          "dependencies": ["React", "ReactNativeDependencies"],
-          "linkedFrameworks": ["UIKit", "Foundation"]
-        },
-        {
-          "type": "objc",
-          "name": "LottieReactNative_fabric",
-          "path": "ios/Fabric",
-          "pattern": "**/*.mm",
-          "headerPattern": "**/*.h",
-          "dependencies": [
-            "React",
-            "ReactNativeDependencies",
-            "Lottie",
-            "LottieReactNative",
-            "LottieReactNative_codegen_components"
-          ],
-          "includeDirectories": ["../../.build/codegen/build/generated/ios/ReactCodegen"],
-          "linkedFrameworks": ["UIKit", "Foundation"]
-        }
-      ]
-    }
-  ]
-}
-```
-
-**Key points:**
-
-- `Hermes` is required in both `externalDependencies` and codegen target `dependencies` for JSI symbols
-- `Lottie` from `spmPackages` is referenced directly in target `dependencies`
-- Swift target depends on `LottieReactNative_objc` for ObjC bridging
-- Fabric target depends on both Swift target and codegen components
+| Format | Example | SPM Output |
+|--------|---------|------------|
+| `{ "exact": "4.5.0" }` | Pin to exact version | `.package(url: "...", exact: "4.5.0")` |
+| `{ "from": "4.0.0" }` | Semver range (>=4.0.0, <5.0.0) | `.package(url: "...", from: "4.0.0")` |
+| `{ "branch": "main" }` | Git branch (not recommended) | `.package(url: "...", branch: "main")` |
+| `{ "revision": "abc123" }` | Git commit SHA | `.package(url: "...", revision: "abc123")` |
 
 ### Using SPM Products in Targets
 
@@ -668,13 +838,13 @@ Add the SPM product name to your target's `dependencies` array. The build system
 
 ```json
 {
-  "targets": [
-    {
-      "type": "swift",
-      "name": "MyTarget",
-      "dependencies": ["React", "Lottie"] // "Lottie" comes from spmPackages
-    }
-  ]
+    "targets": [
+        {
+            "type": "swift",
+            "name": "MyTarget",
+            "dependencies": ["React", "Lottie"]
+        }
+    ]
 }
 ```
 
@@ -710,12 +880,12 @@ Example: If lottie-react-native's podspec changes from `s.dependency 'lottie-ios
 
 ```json
 {
-  "spmPackages": [
-    {
-      "url": "https://github.com/airbnb/lottie-spm.git",
-      "productName": "Lottie",
-      "version": { "exact": "4.6.0" } // Updated to match podspec
-    }
-  ]
+    "spmPackages": [
+        {
+            "url": "https://github.com/airbnb/lottie-spm.git",
+            "productName": "Lottie",
+            "version": { "exact": "4.6.0" }
+        }
+    ]
 }
 ```
