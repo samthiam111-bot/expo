@@ -17,15 +17,17 @@ export const SPMBuild = {
    * @param product Product to build
    * @param buildType Build flavor (Debug or Release)
    * @param platform Optional activate platform to build for
+   * @param hermesIncludeDirs Optional hermes include directories to pass via xcodebuild flags
    */
   buildSwiftPackageAsync: async (
     pkg: SPMPackageSource,
     product: SPMProduct,
     buildType: BuildFlavor,
-    platform?: BuildPlatform
+    platform?: BuildPlatform,
+    hermesIncludeDirs?: string[]
   ): Promise<void> => {
     logger.info(
-      `🏗  Build Swift package for ${chalk.green(pkg.packageName)}/${chalk.green(product.name)} (${buildType.toLowerCase()})`
+      `🏗  Build Package.swift for ${chalk.green(pkg.packageName)}/${chalk.green(product.name)} [${buildType.toLowerCase()}]`
     );
 
     // Verify that we have a Package.swift file in the package directory
@@ -44,7 +46,14 @@ export const SPMBuild = {
 
     // Build for each platform
     for (const buildPlatform of buildPlatforms) {
-      await buildForPlatformAsync(pkg, product, buildType, buildPlatform, packageSwiftPath);
+      await buildForPlatformAsync(
+        pkg,
+        product,
+        buildType,
+        buildPlatform,
+        packageSwiftPath,
+        hermesIncludeDirs
+      );
     }
 
     logger.info(`🏗  Swift package successfully built.`);
@@ -54,9 +63,14 @@ export const SPMBuild = {
    * Cleans the build output folder
    * @param pkg Package
    * @param product Product
+   * @param buildType Build flavor
    */
-  cleanBuildFolderAsync: async (pkg: SPMPackageSource, product: SPMProduct): Promise<void> => {
-    const buildFolderToClean = SPMBuild.getPackageBuildPath(pkg, product);
+  cleanBuildFolderAsync: async (
+    pkg: SPMPackageSource,
+    product: SPMProduct,
+    buildType: BuildFlavor
+  ): Promise<void> => {
+    const buildFolderToClean = SPMBuild.getPackageBuildPath(pkg, product, buildType);
     logger.info(
       `🧹 Cleaning build folder ${chalk.green(path.relative(pkg.buildPath, buildFolderToClean))}...`
     );
@@ -65,14 +79,15 @@ export const SPMBuild = {
 
   /**
    * Returns the output path where we'll build the frameworks for the package.
-   * Build artifacts are stored under packages/precompile/<package-name>/.build/
+   * Build artifacts are stored under packages/precompile/.build/<package-name>/output/<flavor>/frameworks/<product>/
    * so they survive yarn reinstalls and are centralized.
    * @param pkg Package
    * @param product Product
+   * @param buildType Build flavor
    * @returns Output path
    */
-  getPackageBuildPath: (pkg: SPMPackageSource, product: SPMProduct) => {
-    return path.join(pkg.buildPath, '.build', 'frameworks', pkg.packageName, product.name);
+  getPackageBuildPath: (pkg: SPMPackageSource, product: SPMProduct, buildType: BuildFlavor) => {
+    return path.join(pkg.buildPath, 'output', buildType.toLowerCase(), 'frameworks', product.name);
   },
 
   /**
@@ -89,7 +104,7 @@ export const SPMBuild = {
     buildType: BuildFlavor,
     buildPlatform: BuildPlatform
   ) => {
-    const buildOutputPath = SPMBuild.getPackageBuildPath(pkg, product);
+    const buildOutputPath = SPMBuild.getPackageBuildPath(pkg, product, buildType);
 
     const buildFolderPrefix = getBuildFolderPrefixForPlatform(buildPlatform);
 
@@ -171,9 +186,10 @@ const buildXcodeBuildArgs = (
   pkg: SPMPackageSource,
   product: SPMProduct,
   buildType: BuildFlavor,
-  buildPlatform: BuildPlatform
+  buildPlatform: BuildPlatform,
+  hermesIncludeDirs?: string[]
 ): string[] => {
-  const derivedDataPath = SPMBuild.getPackageBuildPath(pkg, product);
+  const derivedDataPath = SPMBuild.getPackageBuildPath(pkg, product, buildType);
   const containsSwiftTargets = product.targets.some((target) => target?.type === 'swift');
 
   // Remap absolute build paths to a canonical /expo-src prefix in DWARF debug info.
@@ -186,18 +202,12 @@ const buildXcodeBuildArgs = (
 
   // Per-target debug prefix maps: remap staging directory paths to canonical source paths.
   // During the SPM build, source files are symlinked into a staging directory:
-  //   <buildPath>/.build/source/<pkgName>/<productName>/<targetName>/
+  //   <buildPath>/generated/<productName>/<targetName>/
   // The compiler records this staging path (not the symlink target) as DW_AT_comp_dir.
   // These maps ensure DWARF records the canonical /expo-src/<pkgPath>/<target.path>/
   // prefix instead, so the resolve-dsym-sourcemaps.js script can map them to the
   // consumer's local package paths.
-  const stagingBase = path.resolve(
-    pkg.buildPath,
-    '.build',
-    'source',
-    pkg.packageName,
-    product.name
-  );
+  const stagingBase = path.resolve(pkg.buildPath, 'generated', product.name);
   const cTargetPrefixMaps: string[] = [];
   const swiftTargetPrefixMaps: string[] = [];
   for (const target of product.targets) {
@@ -226,6 +236,10 @@ const buildXcodeBuildArgs = (
   const allSwiftPrefixMaps = [swiftDebugPrefixMap, ...swiftTargetPrefixMaps].join(' ');
   const allXccPrefixMaps = [debugPrefixMap, ...cTargetPrefixMaps].map((m) => `-Xcc ${m}`).join(' ');
 
+  // Build extra include flags for headers that can't be in Package.swift
+  // (e.g. Hermes headers that conflict with React VFS jsi/ headers)
+  const extraIncludeFlags = (hermesIncludeDirs ?? []).map((dir) => `-I${dir}`);
+
   return [
     '-scheme',
     pkg.packageName,
@@ -238,10 +252,16 @@ const buildXcodeBuildArgs = (
     'SKIP_INSTALL=NO',
     ...(containsSwiftTargets ? ['BUILD_LIBRARY_FOR_DISTRIBUTION=YES'] : []),
     'DEBUG_INFORMATION_FORMAT=dwarf-with-dsym',
-    `OTHER_CFLAGS=$(inherited) ${allCPrefixMaps}`,
-    `OTHER_CPLUSPLUSFLAGS=$(inherited) ${allCPrefixMaps}`,
+    `OTHER_CFLAGS=$(inherited) ${allCPrefixMaps}${extraIncludeFlags.length > 0 ? ' ' + extraIncludeFlags.join(' ') : ''}`,
+    `OTHER_CPLUSPLUSFLAGS=$(inherited) ${allCPrefixMaps}${extraIncludeFlags.length > 0 ? ' ' + extraIncludeFlags.join(' ') : ''}`,
     ...(containsSwiftTargets
-      ? [`OTHER_SWIFT_FLAGS=$(inherited) ${allSwiftPrefixMaps} ${allXccPrefixMaps}`]
+      ? [
+          `OTHER_SWIFT_FLAGS=$(inherited) ${allSwiftPrefixMaps} ${allXccPrefixMaps}${
+            extraIncludeFlags.length > 0
+              ? ' ' + extraIncludeFlags.map((f) => `-Xcc ${f}`).join(' ')
+              : ''
+          }`,
+        ]
       : []),
     'build',
   ];
@@ -260,9 +280,10 @@ const buildForPlatformAsync = async (
   product: SPMProduct,
   buildType: BuildFlavor,
   buildPlatform: BuildPlatform,
-  packageSwiftPath: string
+  packageSwiftPath: string,
+  hermesIncludeDirs?: string[]
 ): Promise<void> => {
-  const args = buildXcodeBuildArgs(pkg, product, buildType, buildPlatform);
+  const args = buildXcodeBuildArgs(pkg, product, buildType, buildPlatform, hermesIncludeDirs);
 
   const { code, error: buildError } = await spawnXcodeBuildWithSpinner(
     args,

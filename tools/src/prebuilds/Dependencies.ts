@@ -3,7 +3,6 @@ import fs from 'fs-extra';
 import path from 'path';
 
 import logger from '../Logger';
-import { Package } from '../Packages';
 import { Artifacts } from './Artifacts';
 import type { DownloadDependenciesOptions, DownloadedDependencies } from './Artifacts.types';
 import type { SPMPackageSource } from './ExternalPackage';
@@ -249,7 +248,7 @@ export const Dependencies = {
    * to a centralized versioned cache. Each artifact is stored in a version-specific directory
    * to allow multiple versions to coexist and prevent version conflicts.
    *
-   * Cache structure: <cachePath>/<artifactName>/<version>-<flavor>/
+   * Cache structure: <cachePath>/<artifactName>/<version>/<flavor>/
    */
   downloadArtifactsAsync: async (
     options: DownloadDependenciesOptions
@@ -410,35 +409,17 @@ export const Dependencies = {
   },
 
   /**
-   * Cleans the xcframeworks output folder for a given package.
-   * This is where the final composed xcframeworks are stored.
-   * For Expo packages: podspecPath/.xcframeworks/ (e.g., packages/expo-font/ios/.xcframeworks/)
-   * For external packages: pkg.path/.xcframeworks/ (e.g., node_modules/react-native-svg/.xcframeworks/)
+   * Cleans the output folder for a given package.
+   * This is where xcframeworks and intermediate build artifacts are stored.
+   * Output is centralized under: packages/precompile/.build/<pkg>/output/
    * @param pkg Package
    */
   cleanXCFrameworksFolderAsync: async (pkg: SPMPackageSource): Promise<void> => {
-    // Determine the correct xcframeworks path based on package type
-    let xcframeworksPath: string;
+    const outputPath = path.join(pkg.buildPath, 'output');
 
-    try {
-      // Try to treat it as an Expo package with a podspec
-      const expoPkg = new Package(pkg.path);
-      const podspecPath = expoPkg.podspecPath;
-      if (podspecPath) {
-        // Expo package: xcframeworks are next to the podspec
-        xcframeworksPath = path.join(pkg.path, path.dirname(podspecPath), '.xcframeworks');
-      } else {
-        // No podspec, use package root
-        xcframeworksPath = path.join(pkg.path, '.xcframeworks');
-      }
-    } catch {
-      // External package: xcframeworks are directly in package root
-      xcframeworksPath = path.join(pkg.path, '.xcframeworks');
-    }
-
-    if (fs.existsSync(xcframeworksPath)) {
-      logger.info(`🧹 Cleaning xcframeworks folder for package ${chalk.green(pkg.packageName)}...`);
-      await fs.remove(xcframeworksPath);
+    if (fs.existsSync(outputPath)) {
+      logger.info(`🧹 Cleaning output folder for package ${chalk.green(pkg.packageName)}...`);
+      await fs.remove(outputPath);
     }
   },
 

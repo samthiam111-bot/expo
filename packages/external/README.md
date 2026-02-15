@@ -5,6 +5,7 @@ You are helping with the Expo iOS precompiled modules system. This document expl
 ## Your Task Context
 
 When a user asks you to add SPM prebuild support for an external package, you need to:
+
 1. Create an `spm.config.json` file in `packages/external/<package-name>/`
 2. Potentially create a patch file if the package source needs modifications
 3. Ensure the codegen module is properly excluded from ReactCodegen
@@ -41,20 +42,22 @@ EXPO_PREBUILD_CACHE_PATH=/custom/cache/path et prebuild-packages ...
 
 ### Cache Management Options
 
-| Flag | Effect |
-|------|--------|
+| Flag            | Effect                                             |
+| --------------- | -------------------------------------------------- |
 | `--clean-cache` | Wipes entire dependency cache (forces re-download) |
-| `--prune-cache` | Removes old cache versions, keeps current version |
-| `--clean-all` | Cleans package outputs only - does NOT touch cache |
+| `--prune-cache` | Removes old cache versions, keeps current version  |
+| `--clean-all`   | Cleans package outputs only - does NOT touch cache |
 
 ## Key Concepts
 
 ### Source Resolution
+
 - **Config location**: `packages/external/<package-name>/spm.config.json`
 - **Source location**: `node_modules/<package-name>/` (resolved at build time)
-- **Output location**: `node_modules/<package-name>/.xcframeworks/<buildFlavor>/`
+- **Output location**: `node_modules/<package-name>/xcframeworks/<buildFlavor>/`
 
 ### The SPMPackageSource Interface
+
 The `ExternalPackage` class implements `SPMPackageSource` just like Expo's `Package` class. This means external packages can use the same build pipeline.
 
 ## Creating spm.config.json
@@ -102,23 +105,23 @@ cat node_modules/<package-name>/package.json | grep -A 10 "codegenConfig"
 
 #### Important Fields Explained
 
-| Field | Purpose | When to Use |
-|-------|---------|-------------|
-| `name` | Target name in SPM | Always required. Use the module name from podspec |
-| `type` | `"library"` or `"binary"` | Always `"library"` for source builds |
-| `sources` | Array of source directories | Paths relative to package root |
-| `publicHeadersPath` | Header search path | For Obj-C/C++ headers |
-| `resources` | Array of resource configs | For Metal shaders, assets, etc. |
-| `fileMapping` | Remap file locations | When headers need path prefixes for imports |
-| `moduleMapContent` | Custom module map | For complex C++ header exposure |
-| `includeDirectories` | Additional include paths | Paths relative to target's `path` field |
-| `compilerFlags` | Custom compiler flags | See [Compiler Flags](#compiler-flags) section below |
+| Field                | Purpose                     | When to Use                                         |
+| -------------------- | --------------------------- | --------------------------------------------------- |
+| `name`               | Target name in SPM          | Always required. Use the module name from podspec   |
+| `type`               | `"library"` or `"binary"`   | Always `"library"` for source builds                |
+| `sources`            | Array of source directories | Paths relative to package root                      |
+| `publicHeadersPath`  | Header search path          | For Obj-C/C++ headers                               |
+| `resources`          | Array of resource configs   | For Metal shaders, assets, etc.                     |
+| `fileMapping`        | Remap file locations        | When headers need path prefixes for imports         |
+| `moduleMapContent`   | Custom module map           | For complex C++ header exposure                     |
+| `includeDirectories` | Additional include paths    | Paths relative to target's `path` field             |
+| `compilerFlags`      | Custom compiler flags       | See [Compiler Flags](#compiler-flags) section below |
 
 #### Product-Level Fields (Required)
 
-| Field | Purpose | When to Use |
-|-------|---------|-------------|
-| `podName` | CocoaPods pod name | **REQUIRED**: The exact name of the pod from the podspec |
+| Field         | Purpose             | When to Use                                                         |
+| ------------- | ------------------- | ------------------------------------------------------------------- |
+| `podName`     | CocoaPods pod name  | **REQUIRED**: The exact name of the pod from the podspec            |
 | `codegenName` | Codegen module name | When package has Fabric components. Must match `codegenConfig.name` |
 
 ### Step 3: Header File Mapping
@@ -135,6 +138,7 @@ When source code uses imports like `#import <modulename/subdir/Header.h>`, you n
 ```
 
 **Key points:**
+
 - `from`: Glob pattern relative to target's `path`
 - `to`: Destination path with `{filename}` placeholder
 - `type`: `"header"` for header files, `"symlink"` for directory symlinks
@@ -164,6 +168,7 @@ When source code uses imports like `#import <modulename/subdir/Header.h>`, you n
 ```
 
 **How to find the codegenName:**
+
 ```bash
 # The codegenName must match codegenConfig.name in package.json
 cat node_modules/<package-name>/package.json | jq '.codegenConfig.name'
@@ -249,6 +254,9 @@ npx patch-package <package-name>
 
 The patch will be created at `patches/<package-name>+<version>.patch`.
 
+Don't make that patch manually - always make it by changing the original files and then
+run npx patch package.
+
 ## Validation Checklist
 
 Before completing your work, verify:
@@ -269,7 +277,7 @@ After creating the config:
 yarn et ios-build-xc react-native-svg
 
 # Verify output exists
-ls -la node_modules/react-native-svg/.xcframeworks/
+ls -la node_modules/react-native-svg/xcframeworks/
 
 # Test in a project
 cd apps/bare-expo/ios
@@ -279,26 +287,32 @@ pod install
 ## Troubleshooting
 
 ### "Module not found" errors
+
 - Check that `publicHeadersPath` points to the directory containing public headers
 - Verify `moduleMapContent` exports all required headers
 
 ### Codegen sources still in ReactCodegen
+
 - Ensure target name contains "codegen" (e.g., `rnsvg-codegen`)
 - Verify `moduleName` exactly matches `codegenConfig.name` from package.json
 
 ### Metal shader errors
+
 - Add `resources` array with `"type": "process"` for `.metal` files
 
 ### C++ header visibility issues
+
 - Use `moduleMapContent` to create a custom module map
 - Use `fileMapping` to restructure source file locations
 
 ### Undefined symbols for JSI (e.g., `facebook::jsi::NativeState::~NativeState()`)
+
 - Add `Hermes` to `externalDependencies` at the product level
 - Add `Hermes` to the `dependencies` array of the C++ codegen target
 - JSI symbols come from Hermes, which is required for any Fabric component codegen
 
 ### Missing `RCTFabricComponentsPlugins.h` or React headers
+
 - Update imports in source code from `#import "RCTFabricComponentsPlugins.h"` to `#import <React/RCTFabricComponentsPlugins.h>`
 - This may require a patch file for the package
 
@@ -310,6 +324,7 @@ For implementation details, examine these files:
 - `tools/src/prebuilds/SPMPackage.ts` - SPM Package.swift generation
 - `tools/src/prebuilds/Codegen.ts` - Codegen handling
 - `packages/expo-modules-autolinking/scripts/ios/precompiled_modules.rb` - Ruby CocoaPods integration
+
 ## Pod Name Configuration
 
 The `podName` field in `spm.config.json` is **required** at the product level. This tells the Ruby code which CocoaPods pod name maps to this package:
@@ -326,9 +341,10 @@ The `podName` field in `spm.config.json` is **required** at the product level. T
 }
 ```
 
-**Why this is needed**: The `try_link_with_prebuilt_xcframework` function pre-scans all `spm.config.json` files to build a lookup map from pod name → package directory. This allows it to find the xcframework at `node_modules/<package-name>/.xcframeworks/<buildFlavor>/<PodName>.xcframework`.
+**Why this is needed**: The `try_link_with_prebuilt_xcframework` function pre-scans all `spm.config.json` files to build a lookup map from pod name → package directory. This allows it to find the xcframework at `node_modules/<package-name>/xcframeworks/<buildFlavor>/<PodName>.xcframework`.
 
 **How to find the podName:**
+
 ```bash
 # Check the podspec file for the spec name
 grep "spec.name" node_modules/<package-name>/*.podspec
@@ -346,7 +362,7 @@ When an external package depends on another external package's xcframework (e.g.
     "ReactNativeDependencies",
     "React",
     "Hermes",
-    "RNWorklets"  // <-- Add the product name (not package name)
+    "RNWorklets" // <-- Add the product name (not package name)
   ]
 }
 ```
@@ -362,7 +378,7 @@ When including headers from a dependency package, use the xcframework headers pa
 ```json
 {
   "includeDirectories": [
-    "../../../../react-native-worklets/.xcframeworks/debug/RNWorklets.xcframework/ios-arm64/RNWorklets.framework/Headers"
+    "../../../../react-native-worklets/xcframeworks/debug/RNWorklets.xcframework/ios-arm64/RNWorklets.framework/Headers"
   ]
 }
 ```
@@ -418,9 +434,12 @@ When building Objective-C code that uses UIKit types (UIScreen, UIApplication, e
 ```json
 {
   "compilerFlags": [
-    "-include", "Foundation/Foundation.h",
-    "-include", "UIKit/UIKit.h",
-    "-include", "QuartzCore/QuartzCore.h"
+    "-include",
+    "Foundation/Foundation.h",
+    "-include",
+    "UIKit/UIKit.h",
+    "-include",
+    "QuartzCore/QuartzCore.h"
   ]
 }
 ```
@@ -455,9 +474,7 @@ For flags that contain quoted strings (like feature flags), use `\\\"` in JSON t
 
 ```json
 {
-  "compilerFlags": [
-    "-DFEATURE_FLAGS=\\\"[FLAG1:true][FLAG2:false]\\\""
-  ]
+  "compilerFlags": ["-DFEATURE_FLAGS=\\\"[FLAG1:true][FLAG2:false]\\\""]
 }
 ```
 
@@ -477,6 +494,7 @@ end
 ```
 
 Create the patch with:
+
 ```bash
 cd /path/to/expo
 npx patch-package <package-name>
@@ -504,6 +522,7 @@ For packages that depend on third-party Swift libraries with official SPM suppor
 ### When to Use SPM Packages
 
 Use `spmPackages` when:
+
 - The dependency provides official prebuilt xcframeworks via SPM (like [lottie-spm](https://github.com/airbnb/lottie-spm))
 - You want SPM to handle version resolution and caching
 - The package is pure Swift and doesn't need custom build configuration
@@ -543,27 +562,28 @@ Add `spmPackages` at the product level:
 
 ### SPM Package Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `url` | Yes | Git URL of the SPM package (e.g., `https://github.com/airbnb/lottie-spm.git`) |
-| `productName` | Yes | The product name exported by the package (what you import, e.g., `"Lottie"`) |
-| `packageName` | No | Override the package identifier. Defaults to last URL path component without `.git` |
-| `version` | Yes | Version requirement object (see below) |
+| Field         | Required | Description                                                                         |
+| ------------- | -------- | ----------------------------------------------------------------------------------- |
+| `url`         | Yes      | Git URL of the SPM package (e.g., `https://github.com/airbnb/lottie-spm.git`)       |
+| `productName` | Yes      | The product name exported by the package (what you import, e.g., `"Lottie"`)        |
+| `packageName` | No       | Override the package identifier. Defaults to last URL path component without `.git` |
+| `version`     | Yes      | Version requirement object (see below)                                              |
 
 ### Version Specifications
 
 **Always use `exact` versions for reproducible builds.** The version should match the version pinned in the upstream podspec.
 
-| Format | Example | SPM Output |
-|--------|---------|------------|
-| `{ "exact": "4.5.0" }` | Pin to exact version | `.package(url: "...", exact: "4.5.0")` |
-| `{ "from": "4.0.0" }` | Semver range (>=4.0.0, <5.0.0) | `.package(url: "...", from: "4.0.0")` |
-| `{ "branch": "main" }` | Git branch (not recommended) | `.package(url: "...", branch: "main")` |
-| `{ "revision": "abc123" }` | Git commit SHA | `.package(url: "...", revision: "abc123")` |
+| Format                     | Example                        | SPM Output                                 |
+| -------------------------- | ------------------------------ | ------------------------------------------ |
+| `{ "exact": "4.5.0" }`     | Pin to exact version           | `.package(url: "...", exact: "4.5.0")`     |
+| `{ "from": "4.0.0" }`      | Semver range (>=4.0.0, <5.0.0) | `.package(url: "...", from: "4.0.0")`      |
+| `{ "branch": "main" }`     | Git branch (not recommended)   | `.package(url: "...", branch: "main")`     |
+| `{ "revision": "abc123" }` | Git commit SHA                 | `.package(url: "...", revision: "abc123")` |
 
 ### Complete Example: lottie-react-native
 
 This example shows a package with:
+
 - SPM remote dependency (lottie-spm for lottie-ios)
 - Fabric codegen components (C++)
 - Swift and Objective-C sources
@@ -571,73 +591,73 @@ This example shows a package with:
 
 ```json
 {
-    "$schema": "../../../tools/src/prebuilds/schemas/spm.config.schema.json",
-    "products": [
+  "$schema": "../../../tools/src/prebuilds/schemas/spm.config.schema.json",
+  "products": [
+    {
+      "name": "LottieReactNative",
+      "podName": "lottie-react-native",
+      "codegenName": "lottiereactnative",
+      "platforms": ["iOS(.v15)"],
+      "externalDependencies": ["ReactNativeDependencies", "React", "Hermes"],
+      "spmPackages": [
         {
-            "name": "LottieReactNative",
-            "podName": "lottie-react-native",
-            "codegenName": "lottiereactnative",
-            "platforms": ["iOS(.v15)"],
-            "externalDependencies": [
-                "ReactNativeDependencies",
-                "React",
-                "Hermes"
-            ],
-            "spmPackages": [
-                {
-                    "url": "https://github.com/airbnb/lottie-spm.git",
-                    "productName": "Lottie",
-                    "version": { "exact": "4.5.0" }
-                }
-            ],
-            "targets": [
-                {
-                    "type": "cpp",
-                    "name": "LottieReactNative_codegen_components",
-                    "moduleName": "lottiereactnative",
-                    "path": ".build/codegen/build/generated/ios/ReactCodegen/react/renderer/components/lottiereactnative",
-                    "pattern": "**/*.cpp",
-                    "headerPattern": "**/*.h",
-                    "dependencies": ["React", "ReactNativeDependencies", "Hermes"],
-                    "includeDirectories": [ "../../../.." ]
-                },
-                {
-                    "type": "swift",
-                    "name": "LottieReactNative",
-                    "path": "ios/LottieReactNative",
-                    "pattern": "**/*.swift",
-                    "dependencies": ["React", "ReactNativeDependencies", "Lottie", "LottieReactNative_objc"],
-                    "linkedFrameworks": ["UIKit", "Foundation"]
-                },
-                {
-                    "type": "objc",
-                    "name": "LottieReactNative_objc",
-                    "path": "ios/LottieReactNative",
-                    "pattern": "**/*.m",
-                    "headerPattern": "**/*.h",
-                    "dependencies": ["React", "ReactNativeDependencies"],
-                    "linkedFrameworks": ["UIKit", "Foundation"]
-                },
-                {
-                    "type": "objc",
-                    "name": "LottieReactNative_fabric",
-                    "path": "ios/Fabric",
-                    "pattern": "**/*.mm",
-                    "headerPattern": "**/*.h",
-                    "dependencies": [
-                        "React", "ReactNativeDependencies", "Lottie",
-                        "LottieReactNative", "LottieReactNative_codegen_components"
-                    ],
-                    "includeDirectories": [ "../../.build/codegen/build/generated/ios/ReactCodegen" ],
-                    "linkedFrameworks": ["UIKit", "Foundation"]
-                }
-            ]
+          "url": "https://github.com/airbnb/lottie-spm.git",
+          "productName": "Lottie",
+          "version": { "exact": "4.5.0" }
         }
-    ]
+      ],
+      "targets": [
+        {
+          "type": "cpp",
+          "name": "LottieReactNative_codegen_components",
+          "moduleName": "lottiereactnative",
+          "path": ".build/codegen/build/generated/ios/ReactCodegen/react/renderer/components/lottiereactnative",
+          "pattern": "**/*.cpp",
+          "headerPattern": "**/*.h",
+          "dependencies": ["React", "ReactNativeDependencies", "Hermes"],
+          "includeDirectories": ["../../../.."]
+        },
+        {
+          "type": "swift",
+          "name": "LottieReactNative",
+          "path": "ios/LottieReactNative",
+          "pattern": "**/*.swift",
+          "dependencies": ["React", "ReactNativeDependencies", "Lottie", "LottieReactNative_objc"],
+          "linkedFrameworks": ["UIKit", "Foundation"]
+        },
+        {
+          "type": "objc",
+          "name": "LottieReactNative_objc",
+          "path": "ios/LottieReactNative",
+          "pattern": "**/*.m",
+          "headerPattern": "**/*.h",
+          "dependencies": ["React", "ReactNativeDependencies"],
+          "linkedFrameworks": ["UIKit", "Foundation"]
+        },
+        {
+          "type": "objc",
+          "name": "LottieReactNative_fabric",
+          "path": "ios/Fabric",
+          "pattern": "**/*.mm",
+          "headerPattern": "**/*.h",
+          "dependencies": [
+            "React",
+            "ReactNativeDependencies",
+            "Lottie",
+            "LottieReactNative",
+            "LottieReactNative_codegen_components"
+          ],
+          "includeDirectories": ["../../.build/codegen/build/generated/ios/ReactCodegen"],
+          "linkedFrameworks": ["UIKit", "Foundation"]
+        }
+      ]
+    }
+  ]
 }
 ```
 
 **Key points:**
+
 - `Hermes` is required in both `externalDependencies` and codegen target `dependencies` for JSI symbols
 - `Lottie` from `spmPackages` is referenced directly in target `dependencies`
 - Swift target depends on `LottieReactNative_objc` for ObjC bridging
@@ -653,13 +673,14 @@ Add the SPM product name to your target's `dependencies` array. The build system
     {
       "type": "swift",
       "name": "MyTarget",
-      "dependencies": ["React", "Lottie"]  // "Lottie" comes from spmPackages
+      "dependencies": ["React", "Lottie"] // "Lottie" comes from spmPackages
     }
   ]
 }
 ```
 
 Generated Package.swift:
+
 ```swift
 .target(
     name: "MyTarget",
@@ -681,6 +702,7 @@ SPM fetches remote packages on first build, which requires network access. For C
 ### Version Management
 
 When updating packages:
+
 1. Check the upstream podspec for the pinned dependency version
 2. Update the `version.exact` field in `spm.config.json` to match
 3. Rebuild the xcframework
@@ -693,7 +715,7 @@ Example: If lottie-react-native's podspec changes from `s.dependency 'lottie-ios
     {
       "url": "https://github.com/airbnb/lottie-spm.git",
       "productName": "Lottie",
-      "version": { "exact": "4.6.0" }  // Updated to match podspec
+      "version": { "exact": "4.6.0" } // Updated to match podspec
     }
   ]
 }

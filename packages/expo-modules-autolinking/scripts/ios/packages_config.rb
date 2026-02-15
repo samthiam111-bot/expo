@@ -13,7 +13,7 @@ module Expo
       @coreFeatures = []
     end
 
-    # Tries to link with prebuilt framework found in the `.xcframeworks` folder.
+    # Tries to link with prebuilt framework found in the 'xcframeworks' folder.
     # Delegates to PrecompiledModules for the actual implementation.
     #
     # @param spec [Pod::Spec] The podspec of the package to link.

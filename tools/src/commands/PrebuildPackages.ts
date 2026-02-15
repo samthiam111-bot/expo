@@ -215,10 +215,10 @@ async function main(packageNames: string[], options: ActionOptions) {
 
     // Lets get started
     if (packageNames.length > 0) {
-      logger.info(`Expo 📦 Prebuilding packages: ${chalk.green(packageNames.join(', '))}`);
+      logger.info(`📦 Prebuilding packages: ${chalk.green(packageNames.join(', '))}`);
     } else {
       const externalNote = includeExternal ? ' (including external packages)' : '';
-      logger.info(`Expo 📦 Discovering packages with spm.config.json${externalNote}...`);
+      logger.info(`📦 Discovering packages with spm.config.json${externalNote}...`);
     }
 
     /**
@@ -296,6 +296,15 @@ async function main(packageNames: string[], options: ActionOptions) {
         `\n📦 [${packageIndex}/${totalPackages}] ${chalk.green(pkg.packageName)}${flavorInfo}`
       );
       logger.info(`${'─'.repeat(60)}`);
+
+      // Log path summary for verification
+      const relPath = (p: string) => path.relative(process.cwd(), p);
+      logger.info(`   ・Package:      ${chalk.dim(relPath(pkg.path))}`);
+      logger.info(`   ・Build:        ${chalk.dim(relPath(pkg.buildPath))}`);
+      logger.info(`   ・Cache:        ${chalk.dim(relPath(artifactsPath))}`);
+      logger.info(
+        `   ・XCFrameworks: ${chalk.dim(relPath(Frameworks.getFrameworksOutputPath(pkg.buildPath, buildFlavors[0])).replace(`/${buildFlavors[0].toLowerCase()}`, '/<flavor>'))}`
+      );
 
       // Build all flavors for this package
       for (const currentBuildFlavor of buildFlavors) {
@@ -386,17 +395,25 @@ async function main(packageNames: string[], options: ActionOptions) {
 
           if (options.cleanBuild || performCleanAll) {
             // Clean dependencies, build and output paths
-            await SPMBuild.cleanBuildFolderAsync(pkg, product);
+            await SPMBuild.cleanBuildFolderAsync(pkg, product, currentBuildFlavor);
           }
 
           if (options.build || performAllSteps) {
             try {
+              // Compute hermes include paths for xcodebuild flags.
+              // Hermes includes can't go in Package.swift because destroot/include/
+              // contains jsi/ headers that conflict with React VFS jsi/ mappings.
+              const hermesIncludeDirs = artifacts
+                ? [path.join(artifacts.hermes, 'destroot', 'include')]
+                : undefined;
+
               // Build the swift package
               await SPMBuild.buildSwiftPackageAsync(
                 pkg,
                 product,
                 currentBuildFlavor,
-                options.platform
+                options.platform,
+                hermesIncludeDirs
               );
               status.build = 'success';
             } catch (error) {
@@ -662,7 +679,7 @@ export default (program: Command) => {
     .option('--clean-build', 'Cleans the build folder before prebuilding packages.', false)
     .option('-g, --generate', 'Only generate Package.swift files without building.', false)
     .option('-a, --artifacts', 'Only download artifacts without building packages.', false)
-    .option('-b, --build', 'Build swift package.', false)
+    .option('-b, --build', 'Build Package.swift.', false)
     .option('-c, --compose', 'Compose xcframework from build artifacts.', false)
     .option(
       '-p, --platform <platform>',

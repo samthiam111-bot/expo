@@ -103,7 +103,7 @@
                         "RNScreens_common_cpp",
                         "RNScreens_cpp"
                     ],
-                    "includeDirectories": [ ".", "../.build/codegen/build/generated/ios/ReactCodegen", "../cpp", "../.build/source/react-native-screens/RNScreens/RNScreens_common_cpp/include/rnscreens" ],
+                    "includeDirectories": [ ".", "../.build/codegen/build/generated/ios/ReactCodegen", "../cpp", "../.build/generated/RNScreens/RNScreens_common_cpp/include/rnscreens" ],
                     "linkedFrameworks": [ "Foundation", "UIKit", "QuartzCore" ],
                     "compilerFlags": [ "-include", "UIKit/UIKit.h" ]
                 }

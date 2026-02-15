@@ -43,8 +43,7 @@
                     ],
                     "includeDirectories": [
                         ".",
-                        "../../.build/codegen/build/generated/ios/ReactCodegen",
-                        "../../../../react-native-worklets/.xcframeworks/debug/RNWorklets.xcframework/ios-arm64/RNWorklets.framework/Headers"
+                        "../../../.build/codegen/build/generated/ios/ReactCodegen"
                     ],
                     "compilerFlags": {
                         "common": {
@@ -113,8 +112,7 @@
                     "includeDirectories": [
                         ".",
                         "../../../Common/cpp",
-                        "../../.build/codegen/build/generated/ios/ReactCodegen",
-                        "../../../../react-native-worklets/.xcframeworks/debug/RNWorklets.xcframework/ios-arm64/RNWorklets.framework/Headers"
+                        "../../../.build/codegen/build/generated/ios/ReactCodegen"
                     ],
                     "linkedFrameworks": [ "Foundation", "UIKit", "QuartzCore", "CoreMotion" ],
                     "compilerFlags": [

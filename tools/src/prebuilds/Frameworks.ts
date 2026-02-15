@@ -4,7 +4,6 @@ import fs from 'fs-extra';
 import path from 'path';
 
 import logger from '../Logger';
-import { Package } from '../Packages';
 import type { SPMPackageSource } from './ExternalPackage';
 import { BuildFlavor } from './Prebuilder.types';
 import {
@@ -76,7 +75,11 @@ export const Frameworks = {
     );
 
     // Get output path for the XCFramework
-    const xcframeworkOutputPath = Frameworks.getFrameworkPath(pkg.path, product.name, buildType);
+    const xcframeworkOutputPath = Frameworks.getFrameworkPath(
+      pkg.buildPath,
+      product.name,
+      buildType
+    );
 
     // Collect frameworks for each build platform
     const frameworks = collectFrameworksForProduct(pkg, product, buildType, platform);
@@ -141,44 +144,26 @@ export const Frameworks = {
   },
 
   /**
-   * Gets the output path for frameworks for the given package. The path should be inside the
-   * package's podspecPath/.xcframeworks/{buildType} folder for Expo packages, or
-   * node_modules/<package-name>/.xcframeworks/{buildType} for external packages.
-   * @param pkgPath Package path (the directory of the package source)
+   * Gets the output path for xcframeworks for the given package.
+   * XCFrameworks are stored under: <buildPath>/output/<flavor>/xcframeworks/
+   * @param buildPath Package build path (centralized under packages/precompile/.build/<pkg>/)
    * @param buildType Build flavor
-   * @returns Output path for frameworks
+   * @returns Output path for xcframeworks
    */
-  getFrameworksOutputPath: (pkgPath: string, buildType: BuildFlavor): string => {
-    // Try to create a Package to get the podspecPath (works for Expo packages)
-    try {
-      const pkg = new Package(pkgPath);
-      const podspecPath = pkg.podspecPath;
-      if (podspecPath) {
-        return path.join(
-          path.join(pkgPath, path.dirname(podspecPath)),
-          '.xcframeworks',
-          buildType.toLowerCase()
-        );
-      }
-    } catch {
-      // Not an Expo package, fall through to external package handling
-    }
-
-    // For external packages (or packages without podspec), put xcframeworks directly in the package path
-    // This handles node_modules/<package-name>/.xcframeworks/<buildType>/
-    return path.join(pkgPath, '.xcframeworks', buildType.toLowerCase());
+  getFrameworksOutputPath: (buildPath: string, buildType: BuildFlavor): string => {
+    return path.join(buildPath, 'output', buildType.toLowerCase(), 'xcframeworks');
   },
 
   /**
    * Returns the full path to the built XCFramework for the given product.
-   * @param pkgPath Package path
+   * @param buildPath Package build path (centralized under packages/precompile/.build/<pkg>/)
    * @param productName SPM product name
    * @param buildType Build flavor
    * @returns Full path to the built XCFramework
    */
-  getFrameworkPath: (pkgPath: string, productName: string, buildType: BuildFlavor): string => {
+  getFrameworkPath: (buildPath: string, productName: string, buildType: BuildFlavor): string => {
     return path.join(
-      Frameworks.getFrameworksOutputPath(pkgPath, buildType),
+      Frameworks.getFrameworksOutputPath(buildPath, buildType),
       `${productName}.xcframework`
     );
   },
@@ -270,7 +255,7 @@ const processXCFrameworkSlices = async (
 
     // Copy Swift-related artifacts if applicable
     if (hasSwiftTarget) {
-      await copyGeneratedObjCSwiftHeaderAsync(pkg, spmConfig, product, slice, slicePath);
+      await copyGeneratedObjCSwiftHeaderAsync(pkg, spmConfig, product, buildType, slice, slicePath);
     }
 
     // Copy Swift module interfaces (needed for ABI stability)
@@ -330,7 +315,7 @@ const copyResourceBundlesIntoXCFrameworkAsync = async (
 
       // Find the bundle in the SPM build output
       const buildOutputPath = path.join(
-        SPMBuild.getPackageBuildPath(pkg, product),
+        SPMBuild.getPackageBuildPath(pkg, product, buildType),
         'Build',
         'Products',
         `${buildType}-${buildFolderPrefix}`,
@@ -381,8 +366,8 @@ const copySPMDependencyXCFrameworksAsync = async (
     return;
   }
 
-  const outputDir = Frameworks.getFrameworksOutputPath(pkg.path, buildType);
-  const buildPath = SPMBuild.getPackageBuildPath(pkg, product);
+  const outputDir = Frameworks.getFrameworksOutputPath(pkg.buildPath, buildType);
+  const buildPath = SPMBuild.getPackageBuildPath(pkg, product, buildType);
 
   for (const spmPkg of spmPackages) {
     // Derive the SPM package name from the URL (last path component without .git)
@@ -935,6 +920,7 @@ const copyGeneratedObjCSwiftHeaderAsync = async (
   pkg: SPMPackageSource,
   spmConfig: SPMConfig,
   product: SPMProduct,
+  buildType: BuildFlavor,
   slice: string,
   slicePath: string
 ): Promise<void> => {
@@ -954,7 +940,7 @@ const copyGeneratedObjCSwiftHeaderAsync = async (
   // The header is generated in the Intermediates/GeneratedModuleMaps directory
   const generatedObjCHeaderName = `${product.name}-Swift.h`;
   const generatedModuleMapsPath = path.join(
-    SPMBuild.getPackageBuildPath(pkg, product),
+    SPMBuild.getPackageBuildPath(pkg, product, buildType),
     'Build',
     'Intermediates.noindex',
     `GeneratedModuleMaps-${buildFolderPrefix}`,
@@ -1016,7 +1002,7 @@ const copySwiftModuleInterfacesAsync = async (
   // Construct path to the built swiftmodule directory
   // The swiftmodule is named after the Swift target (which should match the product name)
   const buildProductsPath = path.join(
-    SPMBuild.getPackageBuildPath(pkg, product),
+    SPMBuild.getPackageBuildPath(pkg, product, buildType),
     'Build',
     'Products',
     `${buildType}-${buildFolderPrefix}`

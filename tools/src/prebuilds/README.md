@@ -106,7 +106,7 @@ Artifacts are cached by version in a shared folder, so subsequent builds reuse d
 ### 2. Package.swift Generation (\`--generate\`)
 
 Generates the SPM build structure from \`spm.config.json\`:
-- Creates a temporary source folder structure in \`.build/source/<ProductName>/\`
+- Creates a temporary source folder structure in `packages/precompile/.build/<package-name>/generated/<ProductName>/`
 - Generates a clean, flat \`Package.swift\` without helper classes
 - Resolves external dependencies to their XCFramework paths
 
@@ -225,7 +225,7 @@ et prebuild-packages --hermes-version 0.14.0 --identity "Apple Development" --no
 | \`--react-native-dependencies-tarball-path <path>\` | Local React Native Dependencies tarball path |
 | \`--artifacts\` | Only download artifacts |
 | \`--generate\` | Only generate Package.swift and source structure |
-| \`--build\` | Only build Swift packages |
+| \`--build\` | Only build Package.swift |
 | \`--compose\` | Only compose XCFrameworks |
 | \`--verify\` | Verify built XCFrameworks |
 | \`--platform <platform>\` | Build for specific platform only |
@@ -258,17 +258,20 @@ Each platform defined in \`spm.config.json\` expands to specific build destinati
 
 ## Output
 
-The build process produces the following in the package directory:
+The build process produces the following:
 
-\`\`\`
-package-name/
-├── .build/
-│   ├── source/
-│   │   └── <ProductName>/     # Generated SPM source structure per product
-│   │       ├── Package.swift
-│   │       └── <TargetName>/  # Symlinked source files
-│   └── frameworks/            # Intermediate build artifacts
-├── .xcframeworks/
+```
+packages/precompile/.build/<package-name>/
+├── generated/
+│   └── <ProductName>/         # Generated SPM source structure per product
+│       ├── Package.swift
+│       └── <TargetName>/      # Symlinked source files
+├── output/
+│   └── framework/             # Intermediate build artifacts
+└── codegen/                   # React Native codegen output
+
+<package-dir>/
+├── xcframeworks/
 │   └── debug|release/
 │       └── ProductName.xcframework/
 │           ├── Info.plist
@@ -356,8 +359,9 @@ If you're using \`--build\` or \`--compose\` without \`--artifacts\`, ensure the
 ### Debugging Tips
 
 1. Use `--generate` only to inspect the generated `Package.swift` without building
-2. Open the `.build/source/<ProductName>/` folder in Xcode to debug SPM resolution issues
-3. Check the `.build/frameworks/` folder for intermediate build artifacts
+2. Open the `packages/precompile/.build/<package-name>/generated/<ProductName>/` folder in Xcode to debug SPM resolution issues
+3. Check the `packages/precompile/.build/<package-name>/output/<flavor>/frameworks/` folder for intermediate build artifacts (per-platform .framework files)
+4. Check the `packages/precompile/.build/<package-name>/output/<flavor>/xcframeworks/` folder for composed XCFrameworks
 4. Use local tarballs (`--react-native-tarball-path`, etc.) to test changes to dependencies
 5. Use `--verify` to validate built frameworks and identify issues
 6. Use `--clean-all` to start fresh if you encounter strange build issues

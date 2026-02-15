@@ -2,24 +2,33 @@
 /**
  * Replace XCFramework for Debug/Release Configuration
  *
- * This script manages symlinks between debug and release XCFrameworks based on the
- * current Xcode build configuration. It's invoked from a CocoaPods script_phase
- * before each compile to ensure the correct XCFramework variant is linked.
+ * This script updates per-product symlinks that switch between debug and release
+ * xcframeworks. It's invoked from a CocoaPods script_phase before each compile
+ * to ensure the correct XCFramework variant is linked.
+ *
+ * Directory structure:
+ *   <xcframeworks_dir>/
+ *     debug/
+ *       <Product>.xcframework
+ *     release/
+ *       <Product>.xcframework
+ *     <Product>.xcframework -> debug/<Product>.xcframework  ← managed by this script
+ *     .last_build_configuration
  *
  * Usage:
- *   node replace-xcframework.js -c <CONFIG> -m <MODULE_NAME> -x <XCFRAMEWORKS_PATH> [-d <DEPS>]
+ *   node replace-xcframework.js -c <CONFIG> -m <MODULE_NAME> -x <XCFRAMEWORKS_DIR>
  *
  * Arguments:
- *   -c, --config       Build configuration: "Debug" or "Release"
- *   -m, --module       Module/product name (e.g., "ExpoModulesCore")
- *   -x, --xcframeworks Path to the .xcframeworks directory
- *   -d, --dependencies Comma-separated dependency xcframework names (e.g., "Lottie")
+ *   -c, --config  Build configuration: "debug" or "release"
+ *   -m, --module  Module/product name (used for validation and logging)
+ *   -x, --xcframeworks  Path to the xcframeworks directory next to the podspec
  *
  * The script:
- *   1. Checks if the current/ symlink exists; creates it if not
- *   2. Reads .last_build_configuration to check if switch is needed
- *   3. Updates symlink to point to <config>/<ModuleName>.xcframework
- *   4. Writes new config to .last_build_configuration
+ *   1. Validates that <xcframeworks_dir>/<config>/<Module>.xcframework exists
+ *   2. Checks if <xcframeworks_dir>/<Module>.xcframework symlink already points to the right flavor
+ *   3. Updates the symlink to point to <config>/<Module>.xcframework if needed
+ *   4. Updates any additional xcframework symlinks found in the directory
+ *   5. Writes the new config to .last_build_configuration
  *
  * Based on React Native's replace-rncore-version.js pattern.
  */
@@ -33,8 +42,7 @@ function parseArgs() {
   const result = {
     config: null,
     module: null,
-    xcframeworksPath: null,
-    dependencies: [],
+    xcframeworksDir: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -49,11 +57,7 @@ function parseArgs() {
         break;
       case '-x':
       case '--xcframeworks':
-        result.xcframeworksPath = args[++i];
-        break;
-      case '-d':
-      case '--dependencies':
-        result.dependencies = (args[++i] || '').split(',').filter(Boolean);
+        result.xcframeworksDir = args[++i];
         break;
     }
   }
@@ -70,19 +74,17 @@ function safeSymlinkCheck(symlinkPath) {
   }
 }
 
-// Re-implement main with safer checks
 function main() {
   const args = parseArgs();
 
   // Validate arguments
-  if (!args.config || !args.module || !args.xcframeworksPath) {
+  if (!args.config || !args.module || !args.xcframeworksDir) {
     console.error(
-      'Usage: replace-xcframework.js -c <CONFIG> -m <MODULE_NAME> -x <XCFRAMEWORKS_PATH> [-d <DEPS>]'
+      'Usage: replace-xcframework.js -c <CONFIG> -m <MODULE_NAME> -x <XCFRAMEWORKS_DIR>'
     );
-    console.error('  -c, --config       Build configuration: "Debug" or "Release"');
-    console.error('  -m, --module       Module/product name');
-    console.error('  -x, --xcframeworks Path to the .xcframeworks directory');
-    console.error('  -d, --dependencies Comma-separated dependency framework names');
+    console.error('  -c, --config  Build configuration: "debug" or "release"');
+    console.error('  -m, --module  Module/product name');
+    console.error('  -x, --xcframeworks  Path to the xcframeworks directory');
     process.exit(1);
   }
 
@@ -90,33 +92,24 @@ function main() {
   const configLower = args.config.toLowerCase();
   if (configLower !== 'debug' && configLower !== 'release') {
     console.error(
-      `[Expo XCFramework] Invalid configuration: ${args.config}. Must be "Debug" or "Release".`
+      `[Expo XCFramework] Invalid configuration: ${args.config}. Must be "debug" or "release".`
     );
     process.exit(1);
   }
 
-  const xcframeworksDir = args.xcframeworksPath;
+  const xcframeworksDir = args.xcframeworksDir;
   const moduleName = args.module;
-  const xcframeworkName = `${moduleName}.xcframework`;
 
   // Paths
-  const currentDir = path.join(xcframeworksDir, 'current');
-  const currentSymlink = path.join(currentDir, xcframeworkName);
-  const targetPath = path.join(xcframeworksDir, configLower, xcframeworkName);
+  const targetXcframework = path.join(xcframeworksDir, configLower, `${moduleName}.xcframework`);
   const lastConfigFile = path.join(xcframeworksDir, '.last_build_configuration');
 
-  // Check if target xcframework exists
-  if (!fs.existsSync(targetPath)) {
+  // Check if target xcframework exists in the flavor directory
+  if (!fs.existsSync(targetXcframework)) {
     console.log(
-      `[Expo XCFramework] ${moduleName}: Target xcframework not found at ${targetPath}, skipping.`
+      `[Expo XCFramework] ${moduleName}: Target xcframework not found at ${targetXcframework}, skipping.`
     );
     return;
-  }
-
-  // Ensure current/ directory exists
-  if (!fs.existsSync(currentDir)) {
-    fs.mkdirSync(currentDir, { recursive: true });
-    console.log(`[Expo XCFramework] ${moduleName}: Created current/ directory.`);
   }
 
   // Read last build configuration
@@ -129,89 +122,53 @@ function main() {
     }
   }
 
-  // Check if symlink already exists and points to the correct target
-  let needsUpdate = true;
-  const symlinkExists = safeSymlinkCheck(currentSymlink);
-
-  if (symlinkExists) {
-    try {
-      const existingTarget = fs.readlinkSync(currentSymlink);
-      const expectedRelativePath = path.join('..', configLower, xcframeworkName);
-
-      if (existingTarget === expectedRelativePath && lastConfig === configLower) {
-        console.log(
-          `[Expo XCFramework] ${moduleName}: Already pointing to ${configLower}, skipping.`
-        );
-        needsUpdate = false;
-      }
-    } catch (e) {
-      // Symlink is broken, needs update
-    }
+  // Check if configuration has changed
+  if (lastConfig === configLower) {
+    console.log(`[Expo XCFramework] ${moduleName}: Already pointing to ${configLower}, skipping.`);
+    return;
   }
 
-  if (needsUpdate) {
-    // Remove existing symlink if present
-    if (symlinkExists) {
-      try {
-        fs.unlinkSync(currentSymlink);
-      } catch (e) {
-        // Ignore errors when removing
-      }
-    }
+  // Update all .xcframework symlinks in the xcframeworks directory.
+  // Each <Product>.xcframework symlink points to <config>/<Product>.xcframework.
+  // When switching configurations, we update ALL of them (product + dependencies).
+  const entries = fs.readdirSync(xcframeworksDir);
+  let updatedCount = 0;
+  for (const entry of entries) {
+    if (!entry.endsWith('.xcframework')) continue;
+    const symlinkPath = path.join(xcframeworksDir, entry);
+    if (!safeSymlinkCheck(symlinkPath)) continue;
 
-    // Create new symlink (relative path for portability)
-    const relativeTarget = path.join('..', configLower, xcframeworkName);
-    fs.symlinkSync(relativeTarget, currentSymlink);
+    const newTarget = path.join(configLower, entry);
+    const newTargetFull = path.join(xcframeworksDir, newTarget);
 
-    // Write last build configuration
-    fs.writeFileSync(lastConfigFile, configLower);
-
-    if (lastConfig && lastConfig !== configLower) {
+    // Only update if the target exists in the new config
+    if (!fs.existsSync(newTargetFull)) {
       console.log(
-        `[Expo XCFramework] ${moduleName}: Switched from ${lastConfig} to ${configLower}.`
+        `[Expo XCFramework] ${moduleName}: ${entry} not found in ${configLower}/, skipping.`
       );
-    } else {
-      console.log(`[Expo XCFramework] ${moduleName}: Created symlink pointing to ${configLower}.`);
-    }
-  }
-
-  // Also switch symlinks for SPM dependency xcframeworks declared in spm.config.json
-  const dependencyNames = args.dependencies || [];
-  for (const depName of dependencyNames) {
-    const depXcframeworkName = `${depName}.xcframework`;
-    const depTargetPath = path.join(xcframeworksDir, configLower, depXcframeworkName);
-    if (!fs.existsSync(depTargetPath)) {
       continue;
     }
 
-    const depCurrentSymlink = path.join(currentDir, depXcframeworkName);
-    const depExpectedTarget = path.join('..', configLower, depXcframeworkName);
-
-    let depNeedsUpdate = true;
-    if (safeSymlinkCheck(depCurrentSymlink)) {
-      try {
-        const depExistingTarget = fs.readlinkSync(depCurrentSymlink);
-        if (depExistingTarget === depExpectedTarget) {
-          depNeedsUpdate = false;
-        }
-      } catch (e) {
-        // Broken symlink, needs update
-      }
+    try {
+      fs.unlinkSync(symlinkPath);
+    } catch (e) {
+      // Ignore errors when removing
     }
+    fs.symlinkSync(newTarget, symlinkPath);
+    updatedCount++;
+  }
 
-    if (depNeedsUpdate) {
-      if (safeSymlinkCheck(depCurrentSymlink)) {
-        try {
-          fs.unlinkSync(depCurrentSymlink);
-        } catch (e) {
-          /* ignore */
-        }
-      }
-      fs.symlinkSync(depExpectedTarget, depCurrentSymlink);
-      console.log(
-        `[Expo XCFramework] ${moduleName}: Switched dependency ${depXcframeworkName} to ${configLower}.`
-      );
-    }
+  // Write last build configuration
+  fs.writeFileSync(lastConfigFile, configLower);
+
+  if (lastConfig && lastConfig !== configLower) {
+    console.log(
+      `[Expo XCFramework] ${moduleName}: Switched ${updatedCount} xcframework(s) from ${lastConfig} to ${configLower}.`
+    );
+  } else {
+    console.log(
+      `[Expo XCFramework] ${moduleName}: Set ${updatedCount} xcframework(s) to ${configLower}.`
+    );
   }
 }
 

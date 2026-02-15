@@ -210,7 +210,11 @@ export const FrameworkVerifier = {
       );
 
       if (targetsWithResources.length > 0) {
-        const xcframeworkPath = Frameworks.getFrameworkPath(pkg.path, product.name, buildFlavor);
+        const xcframeworkPath = Frameworks.getFrameworkPath(
+          pkg.buildPath,
+          product.name,
+          buildFlavor
+        );
 
         // Find all slices in the xcframework
         const sliceNames = (await fs.readdir(xcframeworkPath)).filter((name) => {
@@ -258,7 +262,7 @@ export const FrameworkVerifier = {
       );
       // Still add a failed report so caller knows about the failure
       results.set(product.name, {
-        xcframeworkPath: Frameworks.getFrameworkPath(pkg.path, product.name, buildFlavor),
+        xcframeworkPath: Frameworks.getFrameworkPath(pkg.buildPath, product.name, buildFlavor),
         infoPlistValid: { success: false, message: String(error) },
         codesignValid: { success: true, message: 'Skipped' },
         junkFiles: [],
@@ -1245,7 +1249,7 @@ const verifyAsync = async (
   buildFlavor: BuildFlavor,
   options?: XCFrameworkVerifyOptions
 ): Promise<XCFrameworkVerificationReport> => {
-  const xcframeworkPath = Frameworks.getFrameworkPath(pkg.path, product.name, buildFlavor);
+  const xcframeworkPath = Frameworks.getFrameworkPath(pkg.buildPath, product.name, buildFlavor);
 
   // Verify it's a valid xcframework
   validateXCFramework(xcframeworkPath);
@@ -1326,11 +1330,12 @@ const collectDependencyXcframeworkPaths = (
     const packageName = dep.includes('/') ? dep.split('/')[0] : dep;
 
     const depXcframeworksDir = path.join(
-      pkg.path,
+      pkg.buildPath,
       '..',
       packageName,
-      '.xcframeworks',
-      buildFlavor.toLowerCase()
+      'output',
+      buildFlavor.toLowerCase(),
+      'xcframeworks'
     );
 
     if (!fs.existsSync(depXcframeworksDir)) {

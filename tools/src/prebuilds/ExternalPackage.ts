@@ -82,7 +82,7 @@ export class ExternalPackage implements SPMPackageSource {
     this.configPath = configPath;
     this.packageName = packageName;
     this.path = path.join(getNodeModulesDir(), packageName);
-    this.buildPath = path.join(getPrecompileDir(), packageName);
+    this.buildPath = path.join(getPrecompileDir(), '.build', packageName);
 
     const spmConfigPath = path.join(configPath, SPMConfigFileName);
     if (!fs.existsSync(spmConfigPath)) {

@@ -74,13 +74,9 @@ export const SPMGenerator = {
     const packageSwiftPath = SPMGenerator.getSwiftPackagePath(pkg, product);
     const targetSourceCodePath = SPMGenerator.getGeneratedProductFilesPath(pkg, product);
 
-    // Extract artifact paths if provided
+    // Extract artifact paths (strip buildFlavor which SPMPackage doesn't need)
     const artifactPaths = artifacts
-      ? {
-          hermes: artifacts.hermes,
-          reactNativeDependencies: artifacts.reactNativeDependencies,
-          react: artifacts.react,
-        }
+      ? (({ buildFlavor: _, ...rest }) => rest)(artifacts)
       : undefined;
 
     await SPMPackage.writePackageSwiftAsync(
@@ -118,10 +114,14 @@ export const SPMGenerator = {
       );
 
       const targetDestination = SPMGenerator.getTargetPath(pkg, product, target);
-      // .build/ paths are build artifacts (e.g., codegen output) stored under pkg.buildPath,
-      // not under pkg.path (node_modules source). All other paths are relative to pkg.path.
-      const targetRoot = target.path.startsWith('.build/') ? pkg.buildPath : pkg.path;
-      const targetSourcePath = path.resolve(targetRoot, target.path);
+      // .build/ prefix in spm.config.json indicates a build artifact path (e.g., codegen output).
+      // Since pkg.buildPath already includes .build/ in its path, strip the prefix before joining.
+      const isBuildArtifact = target.path.startsWith('.build/');
+      const targetRoot = isBuildArtifact ? pkg.buildPath : pkg.path;
+      const resolvedTargetPath = isBuildArtifact
+        ? target.path.slice('.build/'.length)
+        : target.path;
+      const targetSourcePath = path.resolve(targetRoot, resolvedTargetPath);
 
       const targetExcludes = target.exclude || [];
       const pattern =
@@ -389,7 +389,7 @@ ${allImports.join('\n')}
    * @returns Path to generated files path
    */
   getGeneratedProductFilesPath: (pkg: SPMPackageSource, product: SPMProduct): string => {
-    return path.join(pkg.buildPath, '.build', 'source', pkg.packageName, product.name);
+    return path.join(pkg.buildPath, 'generated', product.name);
   },
 
   /**

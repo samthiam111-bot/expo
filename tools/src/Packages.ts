@@ -104,11 +104,13 @@ export class Package {
   }
 
   /**
-   * Path where build artifacts (.build/) are stored, centralized under packages/precompile/.
+   * Path where build artifacts are stored, centralized under packages/precompile/.build/.
+   * Layout: packages/precompile/.build/<pkgName>/{generated,output,codegen}
    */
   get buildPath(): string {
     return path.join(
       Directories.getPrecompileDir(),
+      '.build',
       this.packageJson.name ?? path.basename(this.path)
     );
   }

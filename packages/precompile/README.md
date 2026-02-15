@@ -17,7 +17,7 @@ The precompiled modules system allows Expo packages to be distributed as prebuil
 │                         (generates)         (SPM manifest)      (compiles)  │
 │                                                    │                        │
 │                                                    ▼                        │
-│                                            .xcframeworks/                   │
+│                                            xcframeworks/                    │
 │                                            └── debug/                       │
 │                                                └── PackageName.xcframework  │
 │                                                                             │
@@ -448,15 +448,18 @@ After building, your package will have:
 ```
 packages/<package-name>/
 ├── spm.config.json           # Your config
-├── .build/                    # Build artifacts (gitignored)
-│   ├── source/<ProductName>/
-│   │   ├── Package.swift      # Generated SPM manifest
-│   │   └── <TargetName>/      # Symlinked sources
-│   └── frameworks/            # Build outputs
-├── .xcframeworks/             # Final XCFrameworks (gitignored)
+├── xcframeworks/              # Final XCFrameworks (gitignored)
 │   └── debug/
 │       └── <ProductName>.xcframework/
 └── .dependencies/             # Downloaded dependencies (gitignored)
+
+packages/precompile/.build/<package-name>/    # Build artifacts (gitignored)
+├── generated/<ProductName>/
+│   ├── Package.swift          # Generated SPM manifest
+│   └── <TargetName>/          # Symlinked sources
+├── output/
+│   └── framework/             # Build outputs (xcodebuild derived data)
+└── codegen/                   # React Native codegen output
 ```
 
 ---
@@ -503,7 +506,7 @@ SPM doesn't allow two files with the same name. Use `*.swift` (non-recursive) or
 - Verify ObjC target's `moduleName`
 
 ### Verification fails
-- Inspect generated Package.swift: `.build/source/<ProductName>/Package.swift`
+- Inspect generated Package.swift: `packages/precompile/.build/<package-name>/generated/<ProductName>/Package.swift`
 - Ensure glob patterns match all source files
 
 ---

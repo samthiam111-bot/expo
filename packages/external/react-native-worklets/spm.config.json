@@ -42,7 +42,7 @@
                     ],
                     "includeDirectories": [
                         ".",
-                        "../../.build/codegen/build/generated/ios/ReactCodegen"
+                        "../../../.build/codegen/build/generated/ios/ReactCodegen"
                     ],
                     "compilerFlags": {
                         "common": {
@@ -92,7 +92,7 @@
                     "includeDirectories": [
                         ".",
                         "../../../Common/cpp",
-                        "../../.build/codegen/build/generated/ios/ReactCodegen"
+                        "../../../.build/codegen/build/generated/ios/ReactCodegen"
                     ],
                     "linkedFrameworks": [ "Foundation", "UIKit", "QuartzCore" ],
                     "compilerFlags": {
