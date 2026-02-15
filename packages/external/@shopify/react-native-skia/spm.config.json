@@ -186,7 +186,12 @@
                         "AVFoundation",
                         "AVKit",
                         "CoreMedia",
-                        "QuartzCore"
+                        "QuartzCore",
+                        "CoreGraphics",
+                        "CoreText",
+                        "CoreVideo",
+                        "CoreImage",
+                        "IOSurface"
                     ],
                     "compilerFlags": [
                         "-include", "Foundation/Foundation.h",
