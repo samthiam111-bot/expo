@@ -1,10 +1,5 @@
 import { Host, ScrollView, VStack, Text, RoundedRectangle } from '@expo/ui/swift-ui';
-import {
-  frame,
-  foregroundStyle,
-  padding,
-  font,
-} from '@expo/ui/swift-ui/modifiers';
+import { frame, foregroundStyle, padding, font } from '@expo/ui/swift-ui/modifiers';
 
 export default function ScrollViewScreen() {
   return (
@@ -53,9 +48,7 @@ export function ScrollViewHideIndicatorsScreen() {
       <ScrollView showsIndicators={false}>
         <VStack spacing={8}>
           {Array.from({ length: 30 }, (_, i) => (
-            <Text
-              key={i}
-              modifiers={[font({ size: 17 }), padding({ horizontal: 16 })]}>
+            <Text key={i} modifiers={[font({ size: 17 }), padding({ horizontal: 16 })]}>
               {`Item ${i + 1}`}
             </Text>
           ))}
