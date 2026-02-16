@@ -27,7 +27,7 @@ function extractIconRenderingMode(props) {
     }
     return undefined;
 }
-function convertStackHeaderSharedPropsToRNSharedHeaderItem(props) {
+function convertStackHeaderSharedPropsToRNSharedHeaderItem(props, isBottomPlacement = false) {
     const { children, style, separateBackground, icon, ...rest } = props;
     const stringChildren = react_1.Children.toArray(children)
         .filter((child) => typeof child === 'string')
@@ -59,6 +59,7 @@ function convertStackHeaderSharedPropsToRNSharedHeaderItem(props) {
         if ('xcasset' in iconComponentProps) {
             const explicitIconRenderingMode = 'renderingMode' in iconComponentProps ? iconComponentProps.renderingMode : undefined;
             if (process.env.NODE_ENV !== 'production' &&
+                !isBottomPlacement &&
                 (props.iconRenderingMode || explicitIconRenderingMode)) {
                 console.warn('renderingMode has no effect on xcasset icons in left and right toolbar placements. The rendering mode for xcasset icons is controlled by the "Render As" setting in the Xcode asset catalog.');
             }

@@ -83,7 +83,8 @@ export function extractIconRenderingMode(
 }
 
 export function convertStackHeaderSharedPropsToRNSharedHeaderItem(
-  props: StackHeaderItemSharedProps
+  props: StackHeaderItemSharedProps,
+  isBottomPlacement: boolean = false
 ): RNSharedHeaderItem {
   const { children, style, separateBackground, icon, ...rest } = props;
   const stringChildren = Children.toArray(children)
@@ -121,6 +122,7 @@ export function convertStackHeaderSharedPropsToRNSharedHeaderItem(
         'renderingMode' in iconComponentProps ? iconComponentProps.renderingMode : undefined;
       if (
         process.env.NODE_ENV !== 'production' &&
+        !isBottomPlacement &&
         (props.iconRenderingMode || explicitIconRenderingMode)
       ) {
         console.warn(
