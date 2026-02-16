@@ -9,12 +9,23 @@
 # in the centralized build output will be linked as vendored frameworks.
 #
 # Build output:     packages/precompile/.build/<pkg>/output/<flavor>/xcframeworks/<Product>.tar.gz
-# Podspec install:  <podspec_dir>/xcframeworks/<Product>-<flavor>.tar.gz  (tarball, source of truth)
-#                   <podspec_dir>/xcframeworks/<Product>.xcframework      (real dir, extracted from tarball)
-#                   <podspec_dir>/xcframeworks/.last_build_configuration  (tracks current flavor)
+#
+# Pod install flow:
+#   1. has_prebuilt_xcframework?(pod_name) returns true → autolinking uses :podspec instead of :path
+#   2. Podspec calls try_link_with_prebuilt_xcframework(spec) inline at spec creation
+#   3. spec.source is set to {:http => "file:///<tarball>"} → CocoaPods extracts into Pods/<PodName>/
+#   4. prepare_command copies both flavor tarballs into artifacts/ subdirectory
+#   5. Script phases switch debug/release at build time via tarball extraction
+#
+# Resulting layout in Pods/<PodName>/:
+#   <Product>.xcframework/                    (extracted by CocoaPods from source tarball)
+#   artifacts/<Product>-debug.tar.gz          (copied by prepare_command)
+#   artifacts/<Product>-release.tar.gz        (copied by prepare_command)
+#   artifacts/.last_build_configuration       (written by prepare_command / switch script)
 
 require 'digest'
 require 'fileutils'
+require 'uri'
 
 module Expo
   module PrecompiledModules
@@ -24,10 +35,8 @@ module Expo
     # Environment variable for build flavor override
     BUILD_FLAVOR_ENV_VAR = 'EXPO_PRECOMPILED_FLAVOR'.freeze
 
-    # The xcframeworks directory name used at the podspec level
-    # Structure: <podspec_dir>/xcframeworks/<Product>-<flavor>.tar.gz  (tarballs, source of truth)
-    #            <podspec_dir>/xcframeworks/<Product>.xcframework      (real dir, extracted)
-    XCFRAMEWORKS_DIR_NAME = 'xcframeworks'.freeze
+    # Subdirectory within each pod dir for tarballs and build state
+    ARTIFACTS_DIR_NAME = 'artifacts'.freeze
 
     # Centralized build output directory under packages/precompile/
     PRECOMPILE_BUILD_DIR = '.build'.freeze
@@ -49,17 +58,75 @@ module Expo
         ENV[ENV_VAR] == '1'
       end
 
-      # Tries to link a pod spec with a prebuilt XCFramework.
+      # Clears the CocoaPods external download cache for precompiled pods.
+      # Prevents stale cache entries (from previous failed installs) from persisting.
+      def clear_cocoapods_cache
+        return unless enabled?
+
+        cache_root = File.join(Dir.home, 'Library', 'Caches', 'CocoaPods', 'Pods', 'External')
+        return unless File.directory?(cache_root)
+
+        get_pod_lookup_map.each do |pod_name, info|
+          next unless has_prebuilt_xcframework?(pod_name)
+
+          cache_dir = File.join(cache_root, pod_name)
+          if File.directory?(cache_dir)
+            FileUtils.rm_rf(cache_dir)
+          end
+        end
+      end
+
+      # Checks whether a prebuilt XCFramework tarball exists for the given pod.
+      # Used by autolinking_manager to decide between :podspec and :path registration.
       #
-      # Looks for tarballs at the centralized build output:
-      #   packages/precompile/.build/<pkg>/output/<flavor>/xcframeworks/<Product>.tar.gz
+      # @param pod_name [String] The pod name to check
+      # @return [Boolean] true if a prebuilt tarball exists in the build output
+      def has_prebuilt_xcframework?(pod_name)
+        return false unless enabled?
+
+        pod_info = get_pod_lookup_map[pod_name]
+        return false unless pod_info
+
+        product_name = pod_info[:product_name] || pod_name
+        build_tarball = File.join(pod_info[:build_output_dir], build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
+        File.exist?(build_tarball)
+      end
+
+      # Returns external (3rd-party) pods that have prebuilt XCFrameworks.
+      # These need to be registered with :podspec before RN CLI's use_native_modules!
+      # registers them with :path (which would ignore spec.source).
       #
-      # Copies them as <podspec_dir>/xcframeworks/<Product>-<flavor>.tar.gz and extracts
-      # the default flavor to create real xcframework directories.
+      # @param project_directory [Pathname] The project root for computing relative paths
+      # @return [Array<Hash>] Array of {:pod_name, :podspec_path} for external prebuilt pods
+      def get_external_prebuilt_pods(project_directory)
+        return [] unless enabled?
+
+        results = []
+        get_pod_lookup_map.each do |pod_name, info|
+          next unless info[:type] == :external
+          next unless has_prebuilt_xcframework?(pod_name)
+
+          # External podspecs are in node_modules/<npm_package>/
+          podspec_file = File.join(info[:podspec_dir], "#{pod_name}.podspec")
+          next unless File.exist?(podspec_file)
+
+          podspec_rel = Pathname.new(podspec_file).relative_path_from(project_directory).to_s
+          results << { pod_name: pod_name, podspec_path: podspec_rel }
+        end
+
+        results
+      end
+
+      # Links a pod spec with a prebuilt XCFramework.
       #
-      # @param spec [Pod::Spec] The podspec to potentially link with a prebuilt framework
+      # Sets spec.source to the local tarball so CocoaPods extracts it into Pods/<PodName>/.
+      # Adds a prepare_command to copy both flavor tarballs into artifacts/.
+      # Adds script phases for debug/release switching at build time.
+      #
+      # Called inline from the podspec (not from pre_install).
+      #
+      # @param spec [Pod::Spec] The podspec to link with a prebuilt framework
       # @return [Boolean] true if a prebuilt framework was linked, false otherwise
-      #
       def try_link_with_prebuilt_xcframework(spec)
         return false unless enabled?
 
@@ -72,90 +139,126 @@ module Expo
 
         # The xcframework is named after the SPM product name, not the pod name
         product_name = pod_info[:product_name] || spec.name
-        podspec_dir = pod_info[:podspec_dir]
-        podspec_xcframeworks_dir = File.join(podspec_dir, XCFRAMEWORKS_DIR_NAME)
+        build_output_dir = pod_info[:build_output_dir]
 
-        # Check if tarballs already exist alongside the podspec
-        local_tarball = File.join(podspec_xcframeworks_dir, "#{product_name}-#{build_flavor}.tar.gz")
-
-        unless File.exist?(local_tarball)
-          # Not found locally — try to copy tarballs from centralized build output
-          build_output_dir = pod_info[:build_output_dir]
-          build_tarball = File.join(build_output_dir, build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
-
-          unless File.exist?(build_tarball)
-            log_linking_status(spec.name, false, build_tarball)
-            return false
-          end
-
-          # Clean up legacy symlink structure from previous versions
-          cleanup_legacy_symlink_structure(podspec_xcframeworks_dir)
-
-          # Copy tarballs for each available flavor
-          FileUtils.mkdir_p(podspec_xcframeworks_dir)
-          ['debug', 'release'].each do |flavor|
-            src_tarball = File.join(build_output_dir, flavor, 'xcframeworks', "#{product_name}.tar.gz")
-            next unless File.exist?(src_tarball)
-
-            dst_tarball = File.join(podspec_xcframeworks_dir, "#{product_name}-#{flavor}.tar.gz")
-            FileUtils.cp(src_tarball, dst_tarball)
-          end
-
-          # Extract the default flavor tarball to create real xcframework directories
-          extract_tarball(local_tarball, podspec_xcframeworks_dir)
-
-          # Write initial .last_build_configuration
-          File.write(File.join(podspec_xcframeworks_dir, '.last_build_configuration'), build_flavor)
+        # Find the default flavor tarball in the build output
+        default_tarball = File.join(build_output_dir, build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
+        unless File.exist?(default_tarball)
+          log_linking_status(spec.name, false, default_tarball)
+          return false
         end
 
-        # Verify the extracted xcframework exists
-        local_xcframework = File.join(podspec_xcframeworks_dir, "#{product_name}.xcframework")
-        unless File.directory?(local_xcframework)
-          # Tarball exists but xcframework not extracted — extract now
-          extract_tarball(local_tarball, podspec_xcframeworks_dir)
-          File.write(File.join(podspec_xcframeworks_dir, '.last_build_configuration'), build_flavor)
-        end
+        log_linking_status(spec.name, true, default_tarball)
 
-        # At this point the xcframework exists at the podspec level
-        log_linking_status(spec.name, true, local_xcframework)
+        # Set source to the local tarball — CocoaPods will extract into Pods/<PodName>/
+        # URI::File.build produces file:///path (three slashes) which CocoaPods requires for local files.
+        # :flatten => false prevents CocoaPods from unwrapping the single top-level xcframework directory.
+        spec.source = { :http => URI::File.build(path: default_tarball).to_s, :flatten => false }
 
-        # Vendored path is relative from podspec_dir to xcframeworks/<Product>.xcframework
-        relative_path = Pathname.new(local_xcframework).relative_path_from(Pathname.new(podspec_dir)).to_s
-        vendored_paths = [relative_path]
+        # Vendored frameworks — resolved directly from Pods/<PodName>/
+        vendored_paths = ["#{product_name}.xcframework"]
 
-        # Vendor SPM dependency xcframeworks (extracted from the same tarball)
-        # (e.g., Lottie.xcframework alongside LottieReactNative.xcframework)
+        # SPM dependency xcframeworks (extracted from the same tarball)
         (pod_info[:spm_dependency_frameworks] || []).each do |dep_name|
-          dep_xcframework_name = "#{dep_name}.xcframework"
-          dep_local_path = File.join(podspec_xcframeworks_dir, dep_xcframework_name)
-          next unless File.directory?(dep_local_path)
-
-          dep_relative_path = Pathname.new(dep_local_path).relative_path_from(Pathname.new(podspec_dir)).to_s
-          vendored_paths << dep_relative_path
-          Pod::UI.info "#{"[Expo-precompiled] ".blue}     📦 #{dep_xcframework_name.green}"
+          vendored_paths << "#{dep_name}.xcframework"
+          Pod::UI.info "#{"[Expo-precompiled] ".blue}     📦 #{dep_name}.xcframework".green
         end
 
         spec.vendored_frameworks = vendored_paths
 
-        # Add script phases:
-        # 1. Switch xcframework via tarball extraction based on build configuration (before compile)
-        # 2. Write dSYM source path mapping plists (before compile)
-        add_script_phases(spec, product_name, podspec_xcframeworks_dir, pod_info)
+        # prepare_command: self-healing extraction if CocoaPods cache was stale
+        # NOTE: Artifact copying (flavor tarballs) is handled by ensure_artifacts in post_install,
+        # because CocoaPods skips prepare_command when pods are "unchanged" via Manifest.lock.
+        spec.prepare_command = prepare_command_script(product_name, build_output_dir)
+
+        # Add script phases for debug/release switching and dSYM resolution
+        add_script_phases(spec, product_name, pod_info)
 
         true
+      end
+
+      # Generates the prepare_command shell script.
+      # Extracts the xcframework from the build tarball if CocoaPods' download/cache failed.
+      # Artifact copying is handled separately by ensure_artifacts in post_install.
+      #
+      # @param product_name [String] The product/module name
+      # @param build_output_dir [String] Absolute path to the build output directory
+      # @return [String] Shell script for prepare_command
+      def prepare_command_script(product_name, build_output_dir)
+        <<~CMD
+          # Self-healing: extract xcframework from tarball if CocoaPods cache was stale/empty
+          if [ ! -d "#{product_name}.xcframework" ]; then
+            TARBALL="#{build_output_dir}/#{build_flavor}/xcframeworks/#{product_name}.tar.gz"
+            if [ -f "$TARBALL" ]; then
+              echo "[Expo XCFramework] #{product_name}: Extracting xcframework from build output (cache miss)"
+              tar xzf "$TARBALL"
+            fi
+          fi
+        CMD
+      end
+
+      # Copies flavor tarballs into Pods/<PodName>/artifacts/ for all precompiled pods.
+      # Called from post_install (via cocoapods/installer.rb) which runs reliably on every
+      # pod install, unlike prepare_command which CocoaPods skips for "unchanged" pods.
+      #
+      # @param installer [Pod::Installer] The CocoaPods installer instance
+      def ensure_artifacts(installer)
+        return unless enabled?
+
+        pods_root = installer.sandbox.root
+        pod_map = get_pod_lookup_map
+
+        pod_map.each do |pod_name, info|
+          next unless has_prebuilt_xcframework?(pod_name)
+
+          product_name = info[:product_name] || pod_name
+          build_output_dir = info[:build_output_dir]
+          pod_dir = File.join(pods_root, pod_name)
+
+          next unless File.directory?(pod_dir)
+
+          artifacts_dir = File.join(pod_dir, ARTIFACTS_DIR_NAME)
+          FileUtils.mkdir_p(artifacts_dir)
+
+          # Copy both flavor tarballs
+          ['debug', 'release'].each do |flavor|
+            src = File.join(build_output_dir, flavor, 'xcframeworks', "#{product_name}.tar.gz")
+            dst = File.join(artifacts_dir, "#{product_name}-#{flavor}.tar.gz")
+            if File.exist?(src) && !File.exist?(dst)
+              FileUtils.cp(src, dst)
+            end
+          end
+
+          # Write initial .last_build_configuration if missing
+          last_config_file = File.join(artifacts_dir, '.last_build_configuration')
+          unless File.exist?(last_config_file)
+            File.write(last_config_file, build_flavor)
+          end
+
+          # Self-healing: extract xcframework if missing (CocoaPods cache issue)
+          xcframework_dir = File.join(pod_dir, "#{product_name}.xcframework")
+          unless File.directory?(xcframework_dir)
+            tarball = File.join(build_output_dir, build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
+            if File.exist?(tarball)
+              Pod::UI.info "#{"[Expo-precompiled] ".blue}Extracting #{product_name}.xcframework (cache miss)"
+              system("tar", "xzf", tarball, "-C", pod_dir)
+            end
+          end
+        end
+
+        Pod::UI.info "#{"[Expo-precompiled] ".blue}Ensured artifacts for precompiled pods"
       end
 
       # Adds script phases to the podspec:
       # 1. XCFramework switch phase (before_compile) — extracts debug/release tarball
       # 2. dSYM source map resolution phase (before_compile) — writes UUID plists into
-      #    the source-tree xcframework's embedded dSYMs so that Spotlight can find them
+      #    the xcframework's embedded dSYMs so that Spotlight can find them
       #    and lldb can resolve source paths via DBGSourcePathRemapping
       #
       # @param spec [Pod::Spec] The podspec to add script phases to
       # @param product_name [String] The product/module name
-      # @param xcframeworks_dir [String] Absolute path to the xcframeworks directory (<podspec_dir>/xcframeworks)
       # @param pod_info [Hash] Package info from spm.config.json lookup
-      def add_script_phases(spec, product_name, xcframeworks_dir, pod_info)
+      def add_script_phases(spec, product_name, pod_info)
         # Compute paths relative to installation_root so script phases don't contain absolute paths.
         # For pod targets, $SRCROOT points to the Pods/ directory, so we use $PODS_ROOT/..
         # to get back to the installation_root (e.g., <repo>/apps/bare-expo/ios).
@@ -163,14 +266,14 @@ module Expo
         scripts_dir = __dir__
         switch_script_rel = Pathname.new(File.join(scripts_dir, 'replace-xcframework.js')).relative_path_from(project_root).to_s
         dsym_script_rel = Pathname.new(File.join(scripts_dir, 'resolve-dsym-sourcemaps.js')).relative_path_from(project_root).to_s
-        xcframeworks_dir_rel = Pathname.new(xcframeworks_dir).relative_path_from(project_root).to_s
         package_root_rel = Pathname.new(pod_info[:package_root]).relative_path_from(project_root).to_s
 
         # $PODS_ROOT/.. = installation_root at build time
         pods_parent = "$PODS_ROOT/.."
         switch_script_path = "#{pods_parent}/#{switch_script_rel}"
         dsym_script_path = "#{pods_parent}/#{dsym_script_rel}"
-        xcframeworks_dir_var = "#{pods_parent}/#{xcframeworks_dir_rel}"
+        # XCFrameworks live directly in the pod directory: $PODS_ROOT/<PodName>/
+        xcframeworks_dir_var = "$PODS_ROOT/#{spec.name}"
         package_root_var = "#{pods_parent}/#{package_root_rel}"
 
         dsym_stamp = "$(DERIVED_FILE_DIR)/expo-dsym-resolve-#{product_name}-$(CONFIGURATION).stamp"
@@ -203,8 +306,7 @@ module Expo
       end
 
       # Returns the shell script for the xcframework switch phase.
-      # The xcframeworks_dir contains tarballs (<Product>-<flavor>.tar.gz) and
-      # extracted xcframeworks (<Product>.xcframework) managed by replace-xcframework.js
+      # Reads tarballs from artifacts/ subdirectory, extracts xcframeworks into the pod dir.
       def xcframework_switch_script(product_name, xcframeworks_dir, script_path)
         <<-EOS
 # Switch between debug/release XCFramework based on build configuration
@@ -217,7 +319,7 @@ fi
 
 # Early exit: Skip Node.js invocation if configuration hasn't changed
 # This optimization avoids ~100-200ms overhead per module on incremental builds
-LAST_CONFIG_FILE="#{xcframeworks_dir}/.last_build_configuration"
+LAST_CONFIG_FILE="#{xcframeworks_dir}/artifacts/.last_build_configuration"
 if [ -f "$LAST_CONFIG_FILE" ] && [ "$(cat "$LAST_CONFIG_FILE")" = "$CONFIG" ]; then
   exit 0
 fi
@@ -233,12 +335,12 @@ fi
       end
 
       # Returns the shell script for the dSYM source map resolution phase.
-      # Writes UUID plists into the source-tree dSYMs for source path remapping.
+      # Writes UUID plists into dSYMs for source path remapping.
       # lldb discovers dSYMs via Spotlight (mdfind by UUID), so the dSYMs must be
       # in a Spotlight-indexed location (i.e., directory name without dot prefix).
       #
       # @param product_name [String] The product/module name (e.g., "ExpoModulesCore")
-      # @param xcframeworks_dir [String] Path to the xcframeworks directory (build-time var)
+      # @param xcframeworks_dir [String] Path to the pod directory (build-time var)
       # @param script_path [String] Path to resolve-dsym-sourcemaps.js (build-time var)
       # @param npm_package [String] NPM package name (e.g., "expo-modules-core")
       # @param package_root [String] Path to the local package root (build-time var)
@@ -247,12 +349,12 @@ fi
 # Resolve dSYM source path mappings for prebuilt xcframeworks
 # This script is auto-generated by expo-modules-autolinking
 #
-# Writes UUID plists into source-tree dSYMs so lldb can remap
+# Writes UUID plists into dSYMs so lldb can remap
 # /expo-src/... paths back to local package paths.
 
 STAMP_FILE="$DERIVED_FILE_DIR/expo-dsym-resolve-#{product_name}-$CONFIGURATION.stamp"
 
-# Find dSYMs inside the source-tree xcframework (all slices)
+# Find dSYMs inside the xcframework (all slices)
 XCFW_PATH="#{xcframeworks_dir}/#{product_name}.xcframework"
 
 if [ -d "$XCFW_PATH" ]; then
@@ -317,15 +419,22 @@ touch "$STAMP_FILE"
           config = JSON.parse(File.read(config_path))
           products = config['products'] || []
 
-          # Extract npm_package name from path
-          # For scoped packages like packages/external/@shopify/react-native-skia/spm.config.json
-          # we need @shopify/react-native-skia, not just react-native-skia
+          # Extract npm_package name.
+          # For external scoped packages (e.g., packages/external/@shopify/react-native-skia)
+          # we derive it from the path. For internal packages, we read package.json
+          # because the directory name may differ from the npm name (e.g., expo-app-integrity
+          # dir but @expo/app-integrity npm name).
           package_dir = File.dirname(config_path)
           if type == :external
             external_dir = File.join(repo_root, 'packages', 'external')
             npm_package = package_dir.sub("#{external_dir}/", '')
           else
-            npm_package = File.basename(package_dir)
+            package_json_path = File.join(package_dir, 'package.json')
+            if File.exist?(package_json_path)
+              npm_package = JSON.parse(File.read(package_json_path))['name'] || File.basename(package_dir)
+            else
+              npm_package = File.basename(package_dir)
+            end
           end
 
           products.each do |product|
@@ -340,8 +449,9 @@ touch "$STAMP_FILE"
 
             # Determine podspec directory and package root based on package type and conventions
             if type == :internal
-              # Internal packages: podspec in packages/<npm_package>/ios/ or packages/<npm_package>/
-              package_root = File.join(repo_root, 'packages', npm_package)
+              # Internal packages: podspec in packages/<dir>/ios/ or packages/<dir>/
+              # Use the actual directory (npm_package may be scoped, e.g. @expo/app-integrity)
+              package_root = package_dir
               ios_podspec = File.join(package_root, 'ios', "#{pod_name}.podspec")
               root_podspec = File.join(package_root, "#{pod_name}.podspec")
 
@@ -387,38 +497,6 @@ touch "$STAMP_FILE"
         end
       end
 
-      # Extracts a tarball into the destination directory.
-      # @param tarball_path [String] Path to the .tar.gz file
-      # @param dest_dir [String] Directory to extract into
-      def extract_tarball(tarball_path, dest_dir)
-        FileUtils.mkdir_p(dest_dir)
-        system('tar', '-xzf', tarball_path, '-C', dest_dir)
-      end
-
-      # Cleans up legacy symlink-based structure from previous versions.
-      # Removes old debug/ and release/ expanded dirs and xcframework symlinks.
-      # @param xcframeworks_dir [String] Path to the xcframeworks directory
-      def cleanup_legacy_symlink_structure(xcframeworks_dir)
-        return unless File.directory?(xcframeworks_dir)
-
-        # Remove old flavor directories (debug/, release/)
-        ['debug', 'release'].each do |flavor|
-          flavor_path = File.join(xcframeworks_dir, flavor)
-          if File.symlink?(flavor_path)
-            File.unlink(flavor_path)
-          elsif File.directory?(flavor_path)
-            FileUtils.rm_rf(flavor_path)
-          end
-        end
-
-        # Remove old xcframework symlinks
-        Dir.glob(File.join(xcframeworks_dir, '*.xcframework')).each do |entry|
-          if File.symlink?(entry)
-            File.unlink(entry)
-          end
-        end
-      end
-
       # Finds the repository root by walking up from the current directory.
       # Looks for the 'packages' directory as a marker.
       #
@@ -460,14 +538,9 @@ touch "$STAMP_FILE"
           next unless info[:codegen_name]
 
           # Check if the XCFramework actually exists before excluding codegen
-          # Use product_name for xcframework path (xcframework is named after product, not pod)
           product_name = info[:product_name] || pod_name
-          # Check for tarballs (new format) or expanded dirs (legacy) at podspec-level and build output
-          local_tarball = File.join(info[:podspec_dir], XCFRAMEWORKS_DIR_NAME, "#{product_name}-#{build_flavor}.tar.gz")
           build_tarball = File.join(info[:build_output_dir], build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
-          local_xcframework = File.join(info[:podspec_dir], XCFRAMEWORKS_DIR_NAME, "#{product_name}.xcframework")
-          build_xcframework = File.join(info[:build_output_dir], build_flavor, 'xcframeworks', "#{product_name}.xcframework")
-          next unless File.exist?(local_tarball) || File.exist?(build_tarball) || File.directory?(local_xcframework) || File.directory?(build_xcframework)
+          next unless File.exist?(build_tarball)
 
           exclusions << info[:codegen_name]
           Pod::UI.info "#{('[Expo-precompiled]').blue} Found external package '#{info[:npm_package]}' with codegen module: #{info[:codegen_name]}"
@@ -717,7 +790,9 @@ touch "$STAMP_FILE"
             f.puts "HEADER_SEARCH_PATHS = $(inherited) #{paths_string}"
           end
         end
-      end      # Finds the ExpoModulesCore.xcframework path from the installer
+      end
+
+      # Finds the ExpoModulesCore.xcframework path from the installer
       def find_expo_modules_core_xcframework(installer)
         # Look through pod targets to find ExpoModulesCore's vendored framework
         installer.pod_targets.each do |target|

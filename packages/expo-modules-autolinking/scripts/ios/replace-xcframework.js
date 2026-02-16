@@ -8,11 +8,12 @@
  *
  * Directory structure:
  *   <xcframeworks_dir>/
- *     <Product>-debug.tar.gz           (tarball, source of truth)
- *     <Product>-release.tar.gz         (tarball, source of truth)
+ *     artifacts/
+ *       <Product>-debug.tar.gz         (tarball, source of truth)
+ *       <Product>-release.tar.gz       (tarball, source of truth)
+ *       .last_build_configuration
  *     <Product>.xcframework/           (real dir, extracted from tarball)
  *     <Dependency>.xcframework/        (real dir, if any, extracted from same tarball)
- *     .last_build_configuration
  *
  * Usage:
  *   node replace-xcframework.js -c <CONFIG> -m <MODULE_NAME> -x <XCFRAMEWORKS_DIR>
@@ -20,14 +21,14 @@
  * Arguments:
  *   -c, --config  Build configuration: "debug" or "release"
  *   -m, --module  Module/product name (used for tarball lookup and logging)
- *   -x, --xcframeworks  Path to the xcframeworks directory next to the podspec
+ *   -x, --xcframeworks  Path to the pod directory (Pods/<PodName>/)
  *
  * The script:
- *   1. Finds the tarball: <xcframeworksDir>/<module>-<config>.tar.gz
- *   2. Checks .last_build_configuration — skips if unchanged
+ *   1. Finds the tarball: <xcframeworksDir>/artifacts/<module>-<config>.tar.gz
+ *   2. Checks artifacts/.last_build_configuration — skips if unchanged
  *   3. Removes all *.xcframework directories in xcframeworksDir
- *   4. Extracts the tarball: tar -xzf <Product>-<config>.tar.gz -C <xcframeworksDir>
- *   5. Writes the new config to .last_build_configuration
+ *   4. Extracts the tarball: tar -xzf ... -C <xcframeworksDir>
+ *   5. Writes the new config to artifacts/.last_build_configuration
  *
  * Based on React Native's replace-rncore-version.js pattern.
  */
@@ -90,10 +91,11 @@ function main() {
 
   const xcframeworksDir = args.xcframeworksDir;
   const moduleName = args.module;
+  const artifactsDir = path.join(xcframeworksDir, 'artifacts');
 
-  // Find the tarball for the requested configuration
-  const tarballPath = path.join(xcframeworksDir, `${moduleName}-${configLower}.tar.gz`);
-  const lastConfigFile = path.join(xcframeworksDir, '.last_build_configuration');
+  // Find the tarball for the requested configuration (stored in artifacts/)
+  const tarballPath = path.join(artifactsDir, `${moduleName}-${configLower}.tar.gz`);
+  const lastConfigFile = path.join(artifactsDir, '.last_build_configuration');
 
   // Check if tarball exists
   if (!fs.existsSync(tarballPath)) {

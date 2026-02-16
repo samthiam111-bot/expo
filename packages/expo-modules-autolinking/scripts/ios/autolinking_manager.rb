@@ -1,6 +1,7 @@
 require_relative 'constants'
 require_relative 'package'
 require_relative 'packages_config'
+require_relative 'precompiled_modules'
 
 # Require extensions to CocoaPods' classes
 require_relative 'cocoapods/sandbox'
@@ -19,6 +20,10 @@ module Expo
       @options = options
 
       validate_target_definition()
+
+      # Clear stale CocoaPods download cache for precompiled pods.
+      Expo::PrecompiledModules.clear_cocoapods_cache
+
       resolve_result = resolve()
 
       Expo::PackagesConfig.instance.coreFeatures = resolve_result['coreFeatures']
@@ -75,12 +80,26 @@ module Expo
 
             debug_configurations = @target_definition.build_configurations ? @target_definition.build_configurations.select { |config| config.include?('Debug') }.keys : ['Debug']
 
-            pod_options = {
-              :path => podspec_dir_path,
-              :configuration => package.debugOnly ? debug_configurations : [] # An empty array means all configurations
-            }.merge(global_flags, package.flags)
+            # When a prebuilt xcframework exists, use :podspec instead of :path so that
+            # CocoaPods respects spec.source and extracts the tarball into Pods/<PodName>/.
+            # With :path, CocoaPods ignores spec.source and symlinks to the source directory.
+            if Expo::PrecompiledModules.has_prebuilt_xcframework?(pod.pod_name)
+              podspec_file_path = Pathname.new(pod.podspec_dir)
+                .relative_path_from(project_directory)
+                .join("#{pod.pod_name}.podspec").to_path
+              pod_options = {
+                :podspec => podspec_file_path,
+                :configuration => package.debugOnly ? debug_configurations : []
+              }.merge(global_flags, package.flags)
+            else
+              pod_options = {
+                :path => podspec_dir_path,
+                :configuration => package.debugOnly ? debug_configurations : []
+              }.merge(global_flags, package.flags)
+            end
 
-            if tests_only || include_tests
+            # Skip test specs for precompiled pods — the tarball source doesn't contain test files
+            if (tests_only || include_tests) && !Expo::PrecompiledModules.has_prebuilt_xcframework?(pod.pod_name)
               test_specs_names = pod.spec.test_specs.map { |test_spec|
                 test_spec.name.delete_prefix(pod.spec.name + "/")
               }
@@ -121,6 +140,19 @@ module Expo
         requirements << options
         @podfile.pod(pod['name'], *requirements)
       }
+
+      # Register external (3rd-party) prebuilt pods with :podspec BEFORE RN CLI's
+      # use_native_modules! runs. RN CLI always uses :path which makes CocoaPods ignore
+      # spec.source. By registering here first, RN CLI will skip these pods (it checks
+      # for existing dependencies), and CocoaPods will respect the spec.source tarball URL.
+      Expo::PrecompiledModules.get_external_prebuilt_pods(project_directory).each do |ext_pod|
+        # Skip if already registered (e.g., user added it manually in Podfile)
+        next if @target_definition.dependencies.any? { |dep| dep.name == ext_pod[:pod_name] }
+
+        UI.message "— #{ext_pod[:pod_name].green} (prebuilt xcframework)"
+        @podfile.pod(ext_pod[:pod_name], :podspec => ext_pod[:podspec_path])
+      end
+
       self
     end
 

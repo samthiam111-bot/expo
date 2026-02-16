@@ -47,6 +47,11 @@ module Pod
       # causing full recompilation on every incremental build.
       add_early_exit_to_rn_codegen()
 
+      # Copy flavor tarballs into Pods/<PodName>/artifacts/ for build-time switching.
+      # This must run in post_install because prepare_command is unreliable —
+      # CocoaPods skips it when the pod is considered "unchanged" via Manifest.lock.
+      Expo::PrecompiledModules.ensure_artifacts(self)
+
       # TODO(ExpoModulesJSI-xcframework): Remove this call when ExpoModulesJSI.xcframework
       # is built and distributed separately.
       # Configure header search paths for prebuilt XCFrameworks
