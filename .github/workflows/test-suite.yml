@@ -272,6 +272,22 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Install ccache
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache
+          ccache --set-config=depend_mode=true
+          ccache --set-config=direct_mode=true
+          ccache --set-config=hard_link=true
+          ccache --set-config=max_size=1G
+          ccache --set-config=run_second_cpp=true
+          ccache --set-config=sloppiness=file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,modules,system_headers,time_macros
+          ccache -p
+      - name: Set env
+        run: |
+          echo "CMAKE_C_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
+          echo "CCACHE_DIR=${{ runner.temp }}/.ccache" >> $GITHUB_ENV
       - name: ➕ Add `bin` to GITHUB_PATH
         run: echo "$(pwd)/bin" >> $GITHUB_PATH
       - name: ♻️ Restore caches
