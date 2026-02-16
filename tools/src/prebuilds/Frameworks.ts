@@ -141,6 +141,9 @@ export const Frameworks = {
     if (signing?.identity) {
       signXCFramework(xcframeworkOutputPath, signing.identity, signing.useTimestamp ?? true);
     }
+
+    // Create tarball containing the product xcframework and any SPM dependency xcframeworks
+    await createProductTarballAsync(pkg, product, buildType);
   },
 
   /**
@@ -165,6 +168,20 @@ export const Frameworks = {
     return path.join(
       Frameworks.getFrameworksOutputPath(buildPath, buildType),
       `${productName}.xcframework`
+    );
+  },
+
+  /**
+   * Returns the full path to the tarball for the given product.
+   * @param buildPath Package build path (centralized under packages/precompile/.build/<pkg>/)
+   * @param productName SPM product name
+   * @param buildType Build flavor
+   * @returns Full path to the product tarball
+   */
+  getTarballPath: (buildPath: string, productName: string, buildType: BuildFlavor): string => {
+    return path.join(
+      Frameworks.getFrameworksOutputPath(buildPath, buildType),
+      `${productName}.tar.gz`
     );
   },
 };
@@ -471,6 +488,50 @@ const copySPMDependencyXCFrameworksAsync = async (
 
     logger.info(`✅ Composed ${xcframeworkName} alongside ${product.name}.xcframework`);
   }
+};
+
+/**
+ * Creates a tarball containing the product xcframework and any SPM dependency xcframeworks.
+ * The tarball is the source of truth for build-time switching between debug/release flavors.
+ *
+ * @param pkg Package information
+ * @param product SPM product
+ * @param buildType Build flavor (Debug or Release)
+ */
+const createProductTarballAsync = async (
+  pkg: SPMPackageSource,
+  product: SPMProduct,
+  buildType: BuildFlavor
+): Promise<void> => {
+  const outputDir = Frameworks.getFrameworksOutputPath(pkg.buildPath, buildType);
+  const tarballPath = Frameworks.getTarballPath(pkg.buildPath, product.name, buildType);
+
+  // Collect all xcframework directories to include in the tarball
+  const xcframeworkEntries = [`${product.name}.xcframework`];
+
+  // Include SPM dependency xcframeworks (e.g., Lottie.xcframework for lottie-react-native)
+  const spmPackages = product.spmPackages;
+  if (spmPackages && spmPackages.length > 0) {
+    for (const spmPkg of spmPackages) {
+      const depName = spmPkg.productName;
+      const depXcframework = `${depName}.xcframework`;
+      if (await fs.pathExists(path.join(outputDir, depXcframework))) {
+        xcframeworkEntries.push(depXcframework);
+      }
+    }
+  }
+
+  logger.info(
+    `📦 Creating tarball for ${chalk.green(product.name)} (${buildType}): ${xcframeworkEntries.join(', ')}`
+  );
+
+  // Create tarball: tar -czf <Product>.tar.gz -C <outputDir> <entries...>
+  const tarArgs = ['-czf', tarballPath, '-C', outputDir, ...xcframeworkEntries];
+  execSync(`tar ${tarArgs.map((a) => `"${a}"`).join(' ')}`, { stdio: 'pipe' });
+
+  logger.info(
+    `✅ Created ${path.basename(tarballPath)} (${xcframeworkEntries.length} framework(s))`
+  );
 };
 
 /**

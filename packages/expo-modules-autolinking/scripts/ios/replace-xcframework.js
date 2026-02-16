@@ -2,17 +2,16 @@
 /**
  * Replace XCFramework for Debug/Release Configuration
  *
- * This script updates per-product symlinks that switch between debug and release
+ * This script extracts the correct flavor tarball to switch between debug and release
  * xcframeworks. It's invoked from a CocoaPods script_phase before each compile
  * to ensure the correct XCFramework variant is linked.
  *
  * Directory structure:
  *   <xcframeworks_dir>/
- *     debug/
- *       <Product>.xcframework
- *     release/
- *       <Product>.xcframework
- *     <Product>.xcframework -> debug/<Product>.xcframework  ← managed by this script
+ *     <Product>-debug.tar.gz           (tarball, source of truth)
+ *     <Product>-release.tar.gz         (tarball, source of truth)
+ *     <Product>.xcframework/           (real dir, extracted from tarball)
+ *     <Dependency>.xcframework/        (real dir, if any, extracted from same tarball)
  *     .last_build_configuration
  *
  * Usage:
@@ -20,14 +19,14 @@
  *
  * Arguments:
  *   -c, --config  Build configuration: "debug" or "release"
- *   -m, --module  Module/product name (used for validation and logging)
+ *   -m, --module  Module/product name (used for tarball lookup and logging)
  *   -x, --xcframeworks  Path to the xcframeworks directory next to the podspec
  *
  * The script:
- *   1. Validates that <xcframeworks_dir>/<config>/<Module>.xcframework exists
- *   2. Checks if <xcframeworks_dir>/<Module>.xcframework symlink already points to the right flavor
- *   3. Updates the symlink to point to <config>/<Module>.xcframework if needed
- *   4. Updates any additional xcframework symlinks found in the directory
+ *   1. Finds the tarball: <xcframeworksDir>/<module>-<config>.tar.gz
+ *   2. Checks .last_build_configuration — skips if unchanged
+ *   3. Removes all *.xcframework directories in xcframeworksDir
+ *   4. Extracts the tarball: tar -xzf <Product>-<config>.tar.gz -C <xcframeworksDir>
  *   5. Writes the new config to .last_build_configuration
  *
  * Based on React Native's replace-rncore-version.js pattern.
@@ -35,6 +34,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // Parse command line arguments
 function parseArgs() {
@@ -65,15 +65,6 @@ function parseArgs() {
   return result;
 }
 
-// Handle the case where symlink check throws because path doesn't exist
-function safeSymlinkCheck(symlinkPath) {
-  try {
-    return fs.lstatSync(symlinkPath).isSymbolicLink();
-  } catch (e) {
-    return false;
-  }
-}
-
 function main() {
   const args = parseArgs();
 
@@ -88,7 +79,7 @@ function main() {
     process.exit(1);
   }
 
-  // Normalize config to lowercase for directory names
+  // Normalize config to lowercase
   const configLower = args.config.toLowerCase();
   if (configLower !== 'debug' && configLower !== 'release') {
     console.error(
@@ -100,14 +91,14 @@ function main() {
   const xcframeworksDir = args.xcframeworksDir;
   const moduleName = args.module;
 
-  // Paths
-  const targetXcframework = path.join(xcframeworksDir, configLower, `${moduleName}.xcframework`);
+  // Find the tarball for the requested configuration
+  const tarballPath = path.join(xcframeworksDir, `${moduleName}-${configLower}.tar.gz`);
   const lastConfigFile = path.join(xcframeworksDir, '.last_build_configuration');
 
-  // Check if target xcframework exists in the flavor directory
-  if (!fs.existsSync(targetXcframework)) {
+  // Check if tarball exists
+  if (!fs.existsSync(tarballPath)) {
     console.log(
-      `[Expo XCFramework] ${moduleName}: Target xcframework not found at ${targetXcframework}, skipping.`
+      `[Expo XCFramework] ${moduleName}: Tarball not found at ${tarballPath}, skipping.`
     );
     return;
   }
@@ -124,38 +115,36 @@ function main() {
 
   // Check if configuration has changed
   if (lastConfig === configLower) {
-    console.log(`[Expo XCFramework] ${moduleName}: Already pointing to ${configLower}, skipping.`);
+    console.log(`[Expo XCFramework] ${moduleName}: Already extracted ${configLower}, skipping.`);
     return;
   }
 
-  // Update all .xcframework symlinks in the xcframeworks directory.
-  // Each <Product>.xcframework symlink points to <config>/<Product>.xcframework.
-  // When switching configurations, we update ALL of them (product + dependencies).
+  // Remove all existing *.xcframework directories
   const entries = fs.readdirSync(xcframeworksDir);
-  let updatedCount = 0;
+  let removedCount = 0;
   for (const entry of entries) {
     if (!entry.endsWith('.xcframework')) continue;
-    const symlinkPath = path.join(xcframeworksDir, entry);
-    if (!safeSymlinkCheck(symlinkPath)) continue;
-
-    const newTarget = path.join(configLower, entry);
-    const newTargetFull = path.join(xcframeworksDir, newTarget);
-
-    // Only update if the target exists in the new config
-    if (!fs.existsSync(newTargetFull)) {
-      console.log(
-        `[Expo XCFramework] ${moduleName}: ${entry} not found in ${configLower}/, skipping.`
-      );
-      continue;
-    }
+    const entryPath = path.join(xcframeworksDir, entry);
 
     try {
-      fs.unlinkSync(symlinkPath);
+      const stat = fs.lstatSync(entryPath);
+      if (stat.isDirectory() || stat.isSymbolicLink()) {
+        fs.rmSync(entryPath, { recursive: true, force: true });
+        removedCount++;
+      }
     } catch (e) {
       // Ignore errors when removing
     }
-    fs.symlinkSync(newTarget, symlinkPath);
-    updatedCount++;
+  }
+
+  // Extract the tarball
+  try {
+    execSync(`tar -xzf "${tarballPath}" -C "${xcframeworksDir}"`, { stdio: 'pipe' });
+  } catch (e) {
+    console.error(
+      `[Expo XCFramework] ${moduleName}: Failed to extract tarball: ${e.message}`
+    );
+    process.exit(1);
   }
 
   // Write last build configuration
@@ -163,11 +152,11 @@ function main() {
 
   if (lastConfig && lastConfig !== configLower) {
     console.log(
-      `[Expo XCFramework] ${moduleName}: Switched ${updatedCount} xcframework(s) from ${lastConfig} to ${configLower}.`
+      `[Expo XCFramework] ${moduleName}: Switched from ${lastConfig} to ${configLower} (extracted tarball).`
     );
   } else {
     console.log(
-      `[Expo XCFramework] ${moduleName}: Set ${updatedCount} xcframework(s) to ${configLower}.`
+      `[Expo XCFramework] ${moduleName}: Extracted ${configLower} tarball.`
     );
   }
 }
