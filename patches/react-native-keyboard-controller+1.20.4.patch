@@ -1,0 +1,278 @@
+diff --git a/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm b/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm
+index 43033a2..9fb0376 100644
+--- a/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm
++++ b/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModule.mm
+@@ -18,8 +18,10 @@
+ 
+ #if __has_include("react_native_keyboard_controller-Swift.h")
+ #import "react_native_keyboard_controller-Swift.h"
+-#else
++#elif __has_include(<react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>)
+ #import <react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>
++#else
++@import KeyboardController_swift;
+ #endif
+ 
+ #import <React/RCTEventDispatcherProtocol.h>
+diff --git a/node_modules/react-native-keyboard-controller/ios/extensions/UIResponder.swift b/node_modules/react-native-keyboard-controller/ios/extensions/UIResponder.swift
+index 205a5fb..cdd1c8d 100644
+--- a/node_modules/react-native-keyboard-controller/ios/extensions/UIResponder.swift
++++ b/node_modules/react-native-keyboard-controller/ios/extensions/UIResponder.swift
+@@ -19,7 +19,7 @@ public extension UIResponder {
+ 
+ public extension Optional where Wrapped == UIResponder {
+   var reactViewTag: NSNumber {
+-    #if KEYBOARD_CONTROLLER_NEW_ARCH_ENABLED
++    #if RCT_NEW_ARCH_ENABLED
+       return ((self as? UIView)?.superview?.tag ?? -1) as NSNumber
+     #else
+       return (self as? UIView)?.superview?.reactTag ?? -1
+@@ -29,7 +29,7 @@ public extension Optional where Wrapped == UIResponder {
+   var nativeID: String? {
+     guard let superview = (self as? UIView)?.superview else { return nil }
+ 
+-    #if KEYBOARD_CONTROLLER_NEW_ARCH_ENABLED
++    #if RCT_NEW_ARCH_ENABLED
+       return superview.safeValue(forKey: "nativeId") as? String
+     #else
+       return superview.nativeID
+diff --git a/node_modules/react-native-keyboard-controller/ios/extensions/UIScrollView.swift b/node_modules/react-native-keyboard-controller/ios/extensions/UIScrollView.swift
+index 7bdd04c..77d509b 100644
+--- a/node_modules/react-native-keyboard-controller/ios/extensions/UIScrollView.swift
++++ b/node_modules/react-native-keyboard-controller/ios/extensions/UIScrollView.swift
+@@ -11,7 +11,7 @@ import UIKit
+ 
+ public extension UIScrollView {
+   var reactViewTag: NSNumber {
+-    #if KEYBOARD_CONTROLLER_NEW_ARCH_ENABLED
++    #if RCT_NEW_ARCH_ENABLED
+       return (superview?.tag ?? -1) as NSNumber
+     #else
+       return superview?.reactTag ?? -1
+diff --git a/node_modules/react-native-keyboard-controller/ios/views/KeyboardBackgroundViewManager.mm b/node_modules/react-native-keyboard-controller/ios/views/KeyboardBackgroundViewManager.mm
+index 0b83b4c..8b7e085 100644
+--- a/node_modules/react-native-keyboard-controller/ios/views/KeyboardBackgroundViewManager.mm
++++ b/node_modules/react-native-keyboard-controller/ios/views/KeyboardBackgroundViewManager.mm
+@@ -9,8 +9,10 @@
+ 
+ #if __has_include("react_native_keyboard_controller-Swift.h")
+ #import "react_native_keyboard_controller-Swift.h"
+-#else
++#elif __has_include(<react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>)
+ #import <react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>
++#else
++@import KeyboardController_swift;
+ #endif
+ 
+ #ifdef RCT_NEW_ARCH_ENABLED
+@@ -19,7 +21,7 @@
+ #import <react/renderer/components/keyboardcontroller/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/keyboardcontroller/RNKCKeyboardBackgroundViewComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <React/RCTView.h>
+diff --git a/node_modules/react-native-keyboard-controller/ios/views/KeyboardControllerView.mm b/node_modules/react-native-keyboard-controller/ios/views/KeyboardControllerView.mm
+index 110dee8..45d05a3 100644
+--- a/node_modules/react-native-keyboard-controller/ios/views/KeyboardControllerView.mm
++++ b/node_modules/react-native-keyboard-controller/ios/views/KeyboardControllerView.mm
+@@ -16,8 +16,10 @@
+ 
+ #if __has_include("react_native_keyboard_controller-Swift.h")
+ #import "react_native_keyboard_controller-Swift.h"
+-#else
++#elif __has_include(<react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>)
+ #import <react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>
++#else
++@import KeyboardController_swift;
+ #endif
+ 
+ #import <react/renderer/components/keyboardcontroller/EventEmitters.h>
+@@ -26,7 +28,7 @@
+ #import <react/renderer/components/keyboardcontroller/RNKCKeyboardControllerViewComponentDescriptor.h>
+ 
+ #import "KeyboardControllerModule-Header.h"
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ 
+ using namespace facebook::react;
+ 
+diff --git a/node_modules/react-native-keyboard-controller/ios/views/KeyboardExtenderManager.mm b/node_modules/react-native-keyboard-controller/ios/views/KeyboardExtenderManager.mm
+index 69e61e0..d10b3a6 100644
+--- a/node_modules/react-native-keyboard-controller/ios/views/KeyboardExtenderManager.mm
++++ b/node_modules/react-native-keyboard-controller/ios/views/KeyboardExtenderManager.mm
+@@ -9,8 +9,10 @@
+ 
+ #if __has_include("react_native_keyboard_controller-Swift.h")
+ #import "react_native_keyboard_controller-Swift.h"
+-#else
++#elif __has_include(<react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>)
+ #import <react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>
++#else
++@import KeyboardController_swift;
+ #endif
+ 
+ #ifdef RCT_NEW_ARCH_ENABLED
+@@ -21,7 +23,7 @@
+ #import <react/renderer/components/keyboardcontroller/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/keyboardcontroller/RNKCKeyboardExtenderComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <React/RCTTouchHandler.h>
+diff --git a/node_modules/react-native-keyboard-controller/ios/views/KeyboardGestureAreaManager.mm b/node_modules/react-native-keyboard-controller/ios/views/KeyboardGestureAreaManager.mm
+index e095eb0..5a25922 100644
+--- a/node_modules/react-native-keyboard-controller/ios/views/KeyboardGestureAreaManager.mm
++++ b/node_modules/react-native-keyboard-controller/ios/views/KeyboardGestureAreaManager.mm
+@@ -9,8 +9,10 @@
+ 
+ #if __has_include("react_native_keyboard_controller-Swift.h")
+ #import "react_native_keyboard_controller-Swift.h"
+-#else
++#elif __has_include(<react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>)
+ #import <react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>
++#else
++@import KeyboardController_swift;
+ #endif
+ 
+ #ifdef RCT_NEW_ARCH_ENABLED
+@@ -19,7 +21,7 @@
+ #import <react/renderer/components/keyboardcontroller/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/keyboardcontroller/RNKCKeyboardGestureAreaComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <UIKit/UIKit.h>
+diff --git a/node_modules/react-native-keyboard-controller/ios/views/OverKeyboardViewManager.mm b/node_modules/react-native-keyboard-controller/ios/views/OverKeyboardViewManager.mm
+index 4d29b34..e855e0f 100644
+--- a/node_modules/react-native-keyboard-controller/ios/views/OverKeyboardViewManager.mm
++++ b/node_modules/react-native-keyboard-controller/ios/views/OverKeyboardViewManager.mm
+@@ -9,8 +9,10 @@
+ 
+ #if __has_include("react_native_keyboard_controller-Swift.h")
+ #import "react_native_keyboard_controller-Swift.h"
+-#else
++#elif __has_include(<react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>)
+ #import <react_native_keyboard_controller/react_native_keyboard_controller-Swift.h>
++#else
++@import KeyboardController_swift;
+ #endif
+ 
+ #ifdef RCT_NEW_ARCH_ENABLED
+@@ -21,7 +23,7 @@
+ #import <react/renderer/components/keyboardcontroller/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/keyboardcontroller/RNKCOverKeyboardViewComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <React/RCTTouchHandler.h>
+diff --git a/node_modules/react-native-keyboard-controller/react-native-keyboard-controller.podspec b/node_modules/react-native-keyboard-controller/react-native-keyboard-controller.podspec
+index d45023f..a309d8b 100644
+--- a/node_modules/react-native-keyboard-controller/react-native-keyboard-controller.podspec
++++ b/node_modules/react-native-keyboard-controller/react-native-keyboard-controller.podspec
+@@ -17,53 +17,57 @@ Pod::Spec.new do |s|
+   s.platforms    = { :ios => "11.0" }
+   s.source       = { :git => "https://github.com/kirillzyusko/react-native-keyboard-controller.git", :tag => "#{s.version}" }
+ 
+-  s.source_files = "ios/**/*.{h,m,mm,swift}"
+-  s.exclude_files = "ios/KeyboardControllerNative/**/*"
+-  s.public_header_files = "ios/**/*.h"
+-
+-  # This guard prevent to install the dependencies when we run `pod install` in the old architecture.
+-  if new_arch_enabled then
+-    s.pod_target_xcconfig = {
+-      # This is handy when we want to detect if new arch is enabled in Swift code
+-      # and can be used like:
+-      # #if KEYBOARD_CONTROLLER_NEW_ARCH_ENABLED
+-      # // do sth when new arch is enabled
+-      # #else
+-      # // do sth when old arch is enabled
+-      # #endif
+-      "OTHER_SWIFT_FLAGS" => "-DKEYBOARD_CONTROLLER_NEW_ARCH_ENABLED"
+-    }
+-  end
+-
+-  # install_modules_dependencies has been defined since React Native 71
+-  if defined?(install_modules_dependencies)
+-    install_modules_dependencies(s)
++  if defined?(Expo::PackagesConfig) && Expo::PackagesConfig.instance.try_link_with_prebuilt_xcframework(s)
++    # Using prebuilt xcframework - skip source compilation
+   else
+-    s.dependency 'React-Core'
++    s.source_files = "ios/**/*.{h,m,mm,swift}"
++    s.exclude_files = "ios/KeyboardControllerNative/**/*"
++    s.public_header_files = "ios/**/*.h"
+ 
+     # This guard prevent to install the dependencies when we run `pod install` in the old architecture.
+     if new_arch_enabled then
+-      s.compiler_flags = folly_compiler_flags + " -DRCT_NEW_ARCH_ENABLED=1"
+-      s.pod_target_xcconfig = s.pod_target_xcconfig | {
+-        "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/boost\"",
+-        "OTHER_CPLUSPLUSFLAGS" => "-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
+-        "CLANG_CXX_LANGUAGE_STANDARD" => "c++17"
++      s.pod_target_xcconfig = {
++        # This is handy when we want to detect if new arch is enabled in Swift code
++        # and can be used like:
++        # #if KEYBOARD_CONTROLLER_NEW_ARCH_ENABLED
++        # // do sth when new arch is enabled
++        # #else
++        # // do sth when old arch is enabled
++        # #endif
++        "OTHER_SWIFT_FLAGS" => "-DKEYBOARD_CONTROLLER_NEW_ARCH_ENABLED"
+       }
++    end
+ 
+-      s.dependency "React-RCTFabric"
+-      s.dependency "React-Codegen"
+-      s.dependency "RCT-Folly"
+-      s.dependency "RCTRequired"
+-      s.dependency "RCTTypeSafety"
+-      s.dependency "ReactCommon/turbomodule/core"
++    # install_modules_dependencies has been defined since React Native 71
++    if defined?(install_modules_dependencies)
++      install_modules_dependencies(s)
++    else
++      s.dependency 'React-Core'
++
++      # This guard prevent to install the dependencies when we run `pod install` in the old architecture.
++      if new_arch_enabled then
++        s.compiler_flags = folly_compiler_flags + " -DRCT_NEW_ARCH_ENABLED=1"
++        s.pod_target_xcconfig = s.pod_target_xcconfig | {
++          "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/boost\"",
++          "OTHER_CPLUSPLUSFLAGS" => "-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
++          "CLANG_CXX_LANGUAGE_STANDARD" => "c++17"
++        }
++
++        s.dependency "React-RCTFabric"
++        s.dependency "React-Codegen"
++        s.dependency "RCT-Folly"
++        s.dependency "RCTRequired"
++        s.dependency "RCTTypeSafety"
++        s.dependency "ReactCommon/turbomodule/core"
++      end
+     end
+-  end
+-  if new_arch_enabled
+-    s.subspec "common" do |ss|
+-      ss.source_files         = ["common/cpp/**/*.{cpp,h}"]
+-      ss.header_dir           = "react/renderer/components/keyboardcontroller"
+-      ss.private_header_files = "common/cpp/**/*.{h}"
+-      ss.pod_target_xcconfig  = { "HEADER_SEARCH_PATHS" => "\"$(PODS_TARGET_SRCROOT)/common/cpp\"" }
++    if new_arch_enabled
++      s.subspec "common" do |ss|
++        ss.source_files         = ["common/cpp/**/*.{cpp,h}"]
++        ss.header_dir           = "react/renderer/components/keyboardcontroller"
++        ss.private_header_files = "common/cpp/**/*.{h}"
++        ss.pod_target_xcconfig  = { "HEADER_SEARCH_PATHS" => "\"$(PODS_TARGET_SRCROOT)/common/cpp\"" }
++      end
+     end
+   end
+ end

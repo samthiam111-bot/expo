@@ -591,6 +591,13 @@ pod install
 - Add bridging headers to `excludeFromUmbrella`
 - May need to patch the source to use `@import` instead of `#import` in some cases
 
+### Stale build artifacts after config changes
+
+- When changing `exclude` patterns, target structure, or file selections, old symlinks from previous builds may persist
+- The SPM generator only creates new symlinks — it does not remove files that were previously included but are now excluded
+- Run with `--clean` to remove old build output: `et prebuild --clean --include-external <package-name>`
+- Symptom: build errors reference symbols from files you've already excluded (e.g., undefined symbol for a Paper/old-arch manager you added to `exclude`)
+
 ## Code References
 
 For implementation details, examine these files:
