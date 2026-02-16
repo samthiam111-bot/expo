@@ -10,6 +10,12 @@
 
 ### 💡 Others
 
+- Replace `require-from-string` and `sucrase` with `@expo/require-utils` ([#42884](https://github.com/expo/expo/pull/42884) by [@kitten](https://github.com/kitten))
+
+## 55.0.4 — 2026-02-03
+
+### 💡 Others
+
 - Loosen `@babel/code-frame` dependency range ([#42485](https://github.com/expo/expo/pull/42485) by [@kitten](https://github.com/kitten))
 
 ## 55.0.3 — 2026-01-26

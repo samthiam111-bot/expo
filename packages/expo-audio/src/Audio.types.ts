@@ -177,6 +177,13 @@ export type AudioStatus = {
    * @default true
    */
   shouldCorrectPitch: boolean;
+  /**
+   * Whether the media services were reset by the system.
+   * When `true`, the player was interrupted because the system's media daemon crashed.
+   * The player will automatically attempt to recover by reloading the source and resuming playback.
+   * @platform ios
+   */
+  mediaServicesDidReset?: boolean;
 };
 
 /**
@@ -197,6 +204,13 @@ export type RecordingStatus = {
   error: string | null;
   /** File URL of the completed recording, if available. */
   url: string | null;
+  /**
+   * Whether the media services were reset by the system.
+   * When `true`, the recording was interrupted because the system's media daemon crashed.
+   * The recorder is now invalid and must be re-prepared by calling `prepareToRecordAsync()`.
+   * @platform ios
+   */
+  mediaServicesDidReset?: boolean;
 };
 
 /**
@@ -462,6 +476,8 @@ export type AudioMode = {
    * - `'mixWithOthers'`: Audio plays alongside other apps without interrupting them.
    *   On Android, this means no audio focus is requested. Best suited for sound effects,
    *   UI feedback, or short audio clips.
+   *
+   * @default 'mixWithOthers'
    */
   interruptionMode: InterruptionMode;
   /**
@@ -480,12 +496,16 @@ export type AudioMode = {
   allowsRecording: boolean;
   /**
    * Whether the audio session stays active when the app moves to the background.
+   *
+   * > **Note**: On Android, you have to enable the lockscreen controls with [`setActiveForLockScreen`](#setactiveforlockscreenactive-metadata-options) for sustained background playback. Otherwise, the audio will stop after approximately 3 minutes of background playback (OS limitation). Make sure to also appropriately [configure the config-plugin](#configuration-in-app-config).
    * @default false
    */
   shouldPlayInBackground: boolean;
   /**
    * Whether the audio should route through the earpiece.
-   * @platform android
+   * On iOS, this only has an effect when `allowsRecording` is `true` (i.e., the audio session
+   * category is `.playAndRecord`). When `false` (the default), audio is routed through the speaker.
+   * @default false
    */
   shouldRouteThroughEarpiece: boolean;
   /**
@@ -513,6 +533,7 @@ export type AudioMode = {
  *
  *  > **Note:** When using `setActiveForLockScreen`, this must be set to `doNotMix`.
  *
+ * @default 'mixWithOthers'
  */
 export type InterruptionMode = 'mixWithOthers' | 'doNotMix' | 'duckOthers';
 

@@ -8,7 +8,19 @@
 
 ### 🐛 Bug fixes
 
+- [Android] Fix bundle directory listing returning incorrect names, URIs and trailing slashes for files. ([#42882](https://github.com/expo/expo/pull/42882) by [@aleqsio](https://github.com/aleqsio))
+
 ### 💡 Others
+
+## 55.0.5 — 2026-02-08
+
+### 🎉 New features
+
+- Add `append` option to write methods. ([#42778](https://github.com/expo/expo/pull/42778) by [@aleqsio](https://github.com/aleqsio))
+
+## 55.0.4 — 2026-02-03
+
+_This version does not introduce any user-facing changes._
 
 ## 55.0.3 — 2026-01-27
 

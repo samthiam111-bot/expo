@@ -47,6 +47,9 @@ import expo.modules.video.records.VideoSource
 import expo.modules.video.utils.MutableWeakReference
 import expo.modules.video.records.VideoTrack
 import expo.modules.video.utils.buildBasicMediaSession
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.FileInputStream
 import java.lang.ref.WeakReference
@@ -74,7 +77,7 @@ class VideoPlayer(val context: Context, appContext: AppContext, source: VideoSou
     .setLoadControl(loadControl)
     .build()
 
-  internal lateinit var firstFrameEventGenerator: FirstFrameEventGenerator
+  internal val firstFrameEventGenerator: FirstFrameEventGenerator
   val serviceConnection = PlaybackServiceConnection(WeakReference(this), appContext)
   var mediaSession: MediaSession = buildBasicMediaSession(context, player)
   val intervalUpdateClock = IntervalUpdateClock(this)
@@ -339,15 +342,24 @@ class VideoPlayer(val context: Context, appContext: AppContext, source: VideoSou
     player.addListener(playerListener)
     player.addAnalyticsListener(analyticsListener)
     VideoManager.registerVideoPlayer(this)
-
+    firstFrameEventGenerator = createFirstFrameEventGenerator()
     // ExoPlayer will enable subtitles automatically at the start, we want them disabled by default
     appContext.mainQueue.launch {
-      firstFrameEventGenerator = createFirstFrameEventGenerator()
       subtitles.setSubtitlesEnabled(false)
     }
   }
 
+  @kotlin.OptIn(DelicateCoroutinesApi::class)
   override fun close() {
+    // Releases the listeners from VideoPlayerKeepAwake
+    keepScreenOnWhilePlaying = false
+
+    intervalUpdateClock.interval = 0L
+
+    synchronized(listeners) {
+      listeners.clear()
+    }
+
     if (serviceConnection.isConnected) {
       appContext?.reactContext?.unbindService(serviceConnection)
     }
@@ -356,19 +368,20 @@ class VideoPlayer(val context: Context, appContext: AppContext, source: VideoSou
 
     VideoManager.unregisterVideoPlayer(this@VideoPlayer)
 
-    appContext?.mainQueue?.launch {
+    // Run on global scope (not appContext.mainQueue) so that reloading doesn't cancel the release process
+    // https://github.com/expo/expo/blob/cdf592a7fea56fc01b0149e9b2e5dbd294bcdc4c/packages/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt#L277-L279
+    GlobalScope.launch(Dispatchers.Main) {
       firstFrameEventGenerator.release()
       player.removeListener(playerListener)
+      player.removeAnalyticsListener(analyticsListener)
       player.release()
     }
     uncommittedSource = null
     commitedSource = null
-    // Releases the listeners from VideoPlayerKeepAwake
-    keepScreenOnWhilePlaying = false
   }
 
-  override fun deallocate() {
-    super.deallocate()
+  override fun sharedObjectDidRelease() {
+    super.sharedObjectDidRelease()
     close()
   }
 
@@ -509,7 +522,10 @@ class VideoPlayer(val context: Context, appContext: AppContext, source: VideoSou
   }
 
   private fun createFirstFrameEventGenerator(): FirstFrameEventGenerator {
-    return FirstFrameEventGenerator(this, currentVideoViewRef) {
+    val appContext = appContext
+      ?: throw Exceptions.AppContextLost()
+
+    return FirstFrameEventGenerator(appContext, this, currentVideoViewRef) {
       sendEvent(PlayerEvent.RenderedFirstFrame())
     }
   }

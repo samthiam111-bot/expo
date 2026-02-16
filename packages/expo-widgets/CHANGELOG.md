@@ -6,11 +6,32 @@
 
 ### 🎉 New features
 
+- Render widgets in JSC. ([#42987](https://github.com/expo/expo/pull/42987) by [@jakex7](https://github.com/jakex7))
+
+### 🐛 Bug fixes
+
+- Fix blank widget preview content ([#42857](https://github.com/expo/expo/pull/42857) by [@garygcchiu](https://github.com/garygcchiu))
+- Fix duplicated warnings on start and prebuild. ([#43072](https://github.com/expo/expo/pull/43072) by [@jakex7](https://github.com/jakex7))
+
+### 💡 Others
+
+## 55.0.0-alpha.6 — 2026-02-08
+
+### 🐛 Bug fixes
+
+- Register widget extension target with EAS Build => Apple Developer Portal ([#42954](https://github.com/expo/expo/pull/42954) by [@garygcchiu](https://github.com/garygcchiu))
+- Set DEVELOPMENT_TEAM on the widget target during prebuild when ios.appleTeamId is configured ([#42954](https://github.com/expo/expo/pull/42954) by [@garygcchiu](https://github.com/garygcchiu))
+
+## 55.0.0-alpha.5 — 2026-02-03
+
+### 🎉 New features
+
+- Add push-to-start token listener. ([#42721](https://github.com/expo/expo/pull/42721) by [@jakex7](https://github.com/jakex7))
+- Add `onTokenReceived` event and additional Live Activities functions. ([#42724](https://github.com/expo/expo/pull/42724) by [@jakex7](https://github.com/jakex7))
+
 ### 🐛 Bug fixes
 
 - Fix build issue with "ambiguous implicit access level for import" ([#42507](https://github.com/expo/expo/pull/42507) by [@garygcchiu](https://github.com/garygcchiu))
-
-### 💡 Others
 
 ## 55.0.0-alpha.4 — 2026-01-27
 

@@ -707,7 +707,7 @@ internal struct AnimationConfig: Record {
 
 internal struct AnimationModifier: ViewModifier, Record {
   @Field var animation: AnimationConfig
-  @Field var animatedValue: Either<Bool, Double>?
+  @Field var animatedValue: Either<Double, Bool>?
 
   func body(content: Content) -> some View {
     let animationValue = parseAnimation(animation)
@@ -1318,25 +1318,57 @@ internal struct GridCellAnchor: ViewModifier, Record {
  * Registry for SwiftUI view modifiers that can be applied from React Native.
  * This system uses ViewModifier structs for better performance than AnyView wrapping.
  */
-internal class ViewModifierRegistry {
+public class ViewModifierRegistry {
   static let shared = ViewModifierRegistry()
 
-  internal typealias ModiferFactory = ([String: Any], AppContext, EventDispatcher) throws -> any ViewModifier
-  private(set) internal var modifierFactories: [String: ModiferFactory] = [:]
+  public typealias ModifierFactory = ([String: Any], AppContext, EventDispatcher) throws -> any ViewModifier
+  private(set) internal var modifierFactories: [String: ModifierFactory] = [:]
 
   private init() {
     registerBuiltInModifiers()
   }
 
   /**
+   * Public API to register a custom modifier with the given type name.
+   *
+   * - Important: Call this in `OnCreate` of your module definition to ensure modifiers
+   *   are registered before any views are rendered.
+   */
+  public static func register(
+    _ type: String,
+    factory: @escaping ModifierFactory
+  ) {
+    shared.register(type, factory: factory)
+  }
+
+  /**
+   * Public API to unregister a custom modifier by type name.
+   *
+   * - Important: Call this in `OnDestroy` of your module definition for proper cleanup.
+   */
+  public static func unregister(_ type: String) {
+    shared.unregister(type)
+  }
+
+  /**
    * Registers a new modifier with the given type name.
    * The modifier factory creates a ViewModifier from parameters.
    */
-  func register(
+  internal func register(
     _ type: String,
-    factory: @escaping ModiferFactory
+    factory: @escaping ModifierFactory
   ) {
+    if modifierFactories[type] != nil {
+      log.warn("ViewModifierRegistry: Overwriting existing modifier '\(type)'. This may cause unexpected behavior.")
+    }
     modifierFactories[type] = factory
+  }
+
+  /**
+   * Unregisters a modifier by type name.
+   */
+  internal func unregister(_ type: String) {
+    modifierFactories.removeValue(forKey: type)
   }
 
   /**
@@ -1712,6 +1744,10 @@ extension ViewModifierRegistry {
       return try ContainerShapeModifier(from: params, appContext: appContext)
     }
 
+    register("contentShape") { params, appContext, _ in
+      return try ContentShapeModifier(from: params, appContext: appContext)
+    }
+
     register("containerRelativeFrame") { params, appContext, _ in
       return try ContainerRelativeFrameModifier(from: params, appContext: appContext)
     }
@@ -1864,8 +1900,8 @@ extension ViewModifierRegistry {
       return try GaugeStyleModifier(from: params, appContext: appContext)
     }
 
-    register("presentationDetents") { params, appContext, _ in
-      return try PresentationDetentsModifier(from: params, appContext: appContext)
+    register("presentationDetents") { params, appContext, eventDispatcher in
+      return try PresentationDetentsModifier(from: params, appContext: appContext, eventDispatcher: eventDispatcher)
     }
 
     register("presentationDragIndicator") { params, appContext, _ in
@@ -1894,6 +1930,10 @@ extension ViewModifierRegistry {
 
     register("environment") { params, appContext, _ in
       return try EnvironmentModifier(from: params, appContext: appContext)
+    }
+
+    register("contentTransition") { params, appContext, _ in
+      return try ContentTransitionModifier(from: params, appContext: appContext)
     }
   }
 }

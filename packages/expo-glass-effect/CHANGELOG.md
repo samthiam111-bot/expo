@@ -10,6 +10,16 @@
 
 ### 💡 Others
 
+## 55.0.5 — 2026-02-08
+
+### 🎉 New features
+
+- Add animation config to `glassEffectStyle` ([#42005](https://github.com/expo/expo/pull/42005) by [@nishan](https://github.com/intergalacticspacehighway))
+
+## 55.0.4 — 2026-02-03
+
+_This version does not introduce any user-facing changes._
+
 ## 55.0.3 — 2026-01-27
 
 _This version does not introduce any user-facing changes._

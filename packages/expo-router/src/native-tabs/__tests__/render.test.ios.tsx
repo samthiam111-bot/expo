@@ -41,6 +41,18 @@ jest.mock('../NativeTabsView', () => {
   };
 });
 
+jest.mock('react-native-safe-area-context', () => {
+  const actualModule = jest.requireActual(
+    'react-native-safe-area-context'
+  ) as typeof import('react-native-safe-area-context');
+  return {
+    ...actualModule,
+    SafeAreaProvider: jest.fn(({ ...props }) => (
+      <actualModule.SafeAreaProvider {...props} testID="SafeAreaProvider" />
+    )),
+  };
+});
+
 const TabsScreen = Tabs.Screen as jest.MockedFunction<typeof Tabs.Screen>;
 const TabsHost = Tabs.Host as jest.MockedFunction<typeof Tabs.Host>;
 
@@ -792,7 +804,7 @@ it('when nesting NativeTabs, it throws an Error', () => {
 });
 
 describe('Native props validation', () => {
-  let warn;
+  let warn: jest.SpyInstance;
   beforeEach(() => {
     warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
@@ -808,8 +820,8 @@ describe('Native props validation', () => {
 
     expect(screen.getByTestId('index')).toBeVisible();
     expect(TabsScreen).toHaveBeenCalledTimes(1);
-    expect(TabsScreen.mock.calls[0][0].standardAppearance.tabBarBlurEffect).toBe(blurEffect);
-    expect(TabsScreen.mock.calls[0][0].scrollEdgeAppearance.tabBarBlurEffect).toBe('none');
+    expect(TabsScreen.mock.calls[0][0].standardAppearance?.tabBarBlurEffect).toBe(blurEffect);
+    expect(TabsScreen.mock.calls[0][0].scrollEdgeAppearance?.tabBarBlurEffect).toBe('none');
   });
   it.each(['test', 'wrongValue', ...SUPPORTED_BLUR_EFFECTS.map((x) => x.toUpperCase())])(
     'warns when unsupported %s blur effect is used',
@@ -828,8 +840,8 @@ describe('Native props validation', () => {
         `Unsupported blurEffect: ${blurEffect}. Supported values are: ${SUPPORTED_BLUR_EFFECTS.map((effect) => `"${effect}"`).join(', ')}`
       );
       expect(TabsScreen).toHaveBeenCalledTimes(1);
-      expect(TabsScreen.mock.calls[0][0].standardAppearance.tabBarBlurEffect).toBe(undefined);
-      expect(TabsScreen.mock.calls[0][0].scrollEdgeAppearance.tabBarBlurEffect).toBe('none');
+      expect(TabsScreen.mock.calls[0][0].standardAppearance?.tabBarBlurEffect).toBe(undefined);
+      expect(TabsScreen.mock.calls[0][0].scrollEdgeAppearance?.tabBarBlurEffect).toBe('none');
     }
   );
   it.each(SUPPORTED_TAB_BAR_ITEM_LABEL_VISIBILITY_MODES)(
@@ -985,5 +997,25 @@ describe('Misc', () => {
     expect(screen.getByTestId('second')).toBeVisible();
     expect(TabsHost).toHaveBeenCalledTimes(1);
     expect(TabsHost.mock.calls[0][0].tabBarHidden).toBe(expected);
+  });
+});
+
+describe('SafeAreaProvider', () => {
+  it('wraps tab content with SafeAreaProvider on iOS', () => {
+    renderRouter({
+      _layout: () => (
+        <NativeTabs>
+          <NativeTabs.Trigger name="index" />
+        </NativeTabs>
+      ),
+      index: () => <View testID="index" />,
+    });
+
+    expect(screen.getByTestId('index')).toBeVisible();
+    const providers = screen.getAllByTestId('SafeAreaProvider');
+    // Root SAP + Tab SAP
+    expect(providers.length).toBe(2);
+    expect(providers[0]).toBeVisible();
+    expect(providers[1]).toBeVisible();
   });
 });
