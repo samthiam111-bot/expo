@@ -2,6 +2,7 @@ package expo.modules.kotlin.views
 
 import android.annotation.SuppressLint
 import android.view.View
+import android.view.ViewGroup
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -29,12 +30,17 @@ internal class ExpoComposeAndroidView(
 
   @Composable
   override fun ComposableScope.Content() {
+    val w = view.width.toFloat().pxToDp()
+    val h = view.height.toFloat().pxToDp()
     AndroidView(
-      factory = { view },
-      modifier = Modifier.size(
-        view.width.toFloat().pxToDp().dp,
-        view.height.toFloat().pxToDp().dp
-      )
+      factory = {
+        // Detach from any existing parent (e.g. a previous AndroidViewHolder)
+        // to avoid "The specified child already has a parent" when the
+        // composition is recreated by a parent SubcomposeLayout.
+        (view.parent as? ViewGroup)?.removeView(view)
+        view
+      },
+      modifier = Modifier.size(w.dp, h.dp)
     )
   }
 }
