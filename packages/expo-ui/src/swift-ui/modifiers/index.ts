@@ -7,6 +7,7 @@ import { requireNativeModule } from 'expo';
 
 import { animation } from './animation/index';
 import { background } from './background';
+import { confirmationDialog } from './confirmationDialog';
 import { containerShape } from './containerShape';
 import { contentShape } from './contentShape';
 import { createModifier, createModifierWithEventListener, ModifierConfig } from './createModifier';
@@ -1058,7 +1059,8 @@ export type BuiltInModifier =
   | ReturnType<typeof progressViewStyle>
   | ReturnType<typeof gaugeStyle>
   | ReturnType<typeof listStyle>
-  | ReturnType<typeof contentTransition>;
+  | ReturnType<typeof contentTransition>
+  | ReturnType<typeof confirmationDialog>;
 
 /**
  * Main ViewModifier type that supports both built-in and 3rd party modifiers.
@@ -1103,6 +1105,8 @@ export * from './progressViewStyle';
 export * from './gaugeStyle';
 export * from './presentationModifiers';
 export * from './environment';
+export * from './processModifiers';
+export * from './confirmationDialog';
 export type {
   TimingAnimationParams,
   SpringAnimationParams,

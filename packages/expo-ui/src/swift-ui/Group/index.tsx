@@ -1,6 +1,6 @@
 import { requireNativeView } from 'expo';
 
-import { createViewModifierEventListener } from '../modifiers/utils';
+import { processModifiers } from '../modifiers/processModifiers';
 import { type CommonViewModifierProps } from '../types';
 
 export interface GroupProps extends CommonViewModifierProps {
@@ -10,12 +10,12 @@ export interface GroupProps extends CommonViewModifierProps {
 const GroupNativeView: React.ComponentType<GroupProps> = requireNativeView('ExpoUI', 'GroupView');
 
 export function Group(props: GroupProps) {
-  const { modifiers, ...restProps } = props;
+  const { modifiers, children, ...restProps } = props;
+  const { modifierProps, slotChildren } = processModifiers(modifiers);
   return (
-    <GroupNativeView
-      modifiers={modifiers}
-      {...(modifiers ? createViewModifierEventListener(modifiers) : undefined)}
-      {...restProps}
-    />
+    <GroupNativeView {...modifierProps} {...restProps}>
+      {children}
+      {slotChildren}
+    </GroupNativeView>
   );
 }

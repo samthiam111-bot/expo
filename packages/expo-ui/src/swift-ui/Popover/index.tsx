@@ -1,7 +1,7 @@
 import { requireNativeView } from 'expo';
 import { NativeSyntheticEvent } from 'react-native';
 
-import { createViewModifierEventListener } from '../modifiers/utils';
+import { processModifiers } from '../modifiers/processModifiers';
 import { type CommonViewModifierProps } from '../types';
 
 export type PopoverViewProps = {
@@ -57,6 +57,7 @@ Popover.Content = PopoverContent;
 
 export function Popover(props: PopoverViewProps) {
   const { onIsPresentedChange, modifiers, children, isPresented, ...restProps } = props;
+  const { modifierProps, slotChildren } = processModifiers(modifiers);
 
   const handleIsPresentedChange = (event: NativeSyntheticEvent<{ isPresented: boolean }>) => {
     onIsPresentedChange?.(event.nativeEvent.isPresented);
@@ -64,11 +65,12 @@ export function Popover(props: PopoverViewProps) {
 
   return (
     <PopoverNativeView
-      {...(modifiers ? createViewModifierEventListener(modifiers) : undefined)}
+      {...modifierProps}
       {...restProps}
       isPresented={isPresented}
       onIsPresentedChange={handleIsPresentedChange}>
       {children}
+      {slotChildren}
     </PopoverNativeView>
   );
 }

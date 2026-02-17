@@ -1935,5 +1935,19 @@ extension ViewModifierRegistry {
     register("contentTransition") { params, appContext, _ in
       return try ContentTransitionModifier(from: params, appContext: appContext)
     }
+
+    register("confirmationDialog") { params, appContext, eventDispatcher in
+      let record = try ConfirmationDialogRecord(from: params, appContext: appContext)
+      let slots = params["$slots"] as? [String: [any ExpoSwiftUI.AnyChild]]
+
+      return ConfirmationDialogModifier(
+        title: record.title,
+        message: record.message,
+        presented: record.presented,
+        actionsChildren: slots?["actions"],
+        messageChildren: slots?["message"],
+        eventDispatcher: eventDispatcher
+      )
+    }
   }
 }

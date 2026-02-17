@@ -2,23 +2,13 @@ import { requireNativeView } from 'expo';
 
 import { ListForEach, type ListForEachProps } from './ListForEach';
 import { type ViewEvent } from '../../types';
-import { createViewModifierEventListener } from '../modifiers/utils';
+import { processModifiers } from '../modifiers/processModifiers';
 import { type CommonViewModifierProps } from '../types';
 
 const ListNativeView: React.ComponentType<NativeListProps> = requireNativeView<NativeListProps>(
   'ExpoUI',
   'ListView'
 );
-
-function transformListProps(props: Omit<ListProps, 'children'>): Omit<NativeListProps, 'children'> {
-  const { modifiers, ...restProps } = props;
-  return {
-    modifiers,
-    ...(modifiers ? createViewModifierEventListener(modifiers) : undefined),
-    ...restProps,
-    onSelectionChange: ({ nativeEvent: { selection } }) => props?.onSelectionChange?.(selection),
-  };
-}
 
 export interface ListProps extends CommonViewModifierProps {
   /**
@@ -52,8 +42,17 @@ type NativeListProps = Omit<ListProps, 'onSelectionChange'> &
  * A list component that renders its children using a native SwiftUI `List`.
  */
 export function List(props: ListProps) {
-  const { children, ...nativeProps } = props;
-  return <ListNativeView {...transformListProps(nativeProps)}>{children}</ListNativeView>;
+  const { modifiers, children, onSelectionChange, ...restProps } = props;
+  const { modifierProps, slotChildren } = processModifiers(modifiers);
+  return (
+    <ListNativeView
+      {...modifierProps}
+      {...restProps}
+      onSelectionChange={({ nativeEvent: { selection } }) => onSelectionChange?.(selection)}>
+      {children}
+      {slotChildren}
+    </ListNativeView>
+  );
 }
 
 List.ForEach = ListForEach;

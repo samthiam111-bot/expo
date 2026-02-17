@@ -1,6 +1,6 @@
 import { requireNativeView } from 'expo';
 
-import { createViewModifierEventListener } from '../modifiers/utils';
+import { processModifiers } from '../modifiers/processModifiers';
 import { CommonViewModifierProps } from '../types';
 
 export type ZStackProps = {
@@ -32,12 +32,12 @@ const ZStackNativeView: React.ComponentType<ZStackProps> = requireNativeView(
 );
 
 export function ZStack(props: ZStackProps) {
-  const { modifiers, ...restProps } = props;
+  const { modifiers, children, ...restProps } = props;
+  const { modifierProps, slotChildren } = processModifiers(modifiers);
   return (
-    <ZStackNativeView
-      modifiers={modifiers}
-      {...(modifiers ? createViewModifierEventListener(modifiers) : undefined)}
-      {...restProps}
-    />
+    <ZStackNativeView {...modifierProps} {...restProps}>
+      {children}
+      {slotChildren}
+    </ZStackNativeView>
   );
 }

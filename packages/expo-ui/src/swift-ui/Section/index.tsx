@@ -1,6 +1,6 @@
 import { requireNativeView } from 'expo';
 
-import { createViewModifierEventListener } from '../modifiers/utils';
+import { processModifiers } from '../modifiers/processModifiers';
 import { type CommonViewModifierProps } from '../types';
 
 export type SectionProps = {
@@ -56,10 +56,10 @@ const SectionContent: React.ComponentType<object> = requireNativeView('ExpoUI', 
  */
 export function Section(props: SectionProps) {
   const { modifiers, header, footer, children, onIsExpandedChange, ...restProps } = props;
+  const { modifierProps, slotChildren } = processModifiers(modifiers);
   return (
     <SectionNativeView
-      modifiers={modifiers}
-      {...(modifiers ? createViewModifierEventListener(modifiers) : undefined)}
+      {...modifierProps}
       {...(onIsExpandedChange && {
         onIsExpandedChange: (e: { nativeEvent: { isExpanded: boolean } }) =>
           onIsExpandedChange(e.nativeEvent.isExpanded),
@@ -68,6 +68,7 @@ export function Section(props: SectionProps) {
       {header && <SectionHeader>{header}</SectionHeader>}
       {footer && <SectionFooter>{footer}</SectionFooter>}
       <SectionContent>{children}</SectionContent>
+      {slotChildren}
     </SectionNativeView>
   );
 }

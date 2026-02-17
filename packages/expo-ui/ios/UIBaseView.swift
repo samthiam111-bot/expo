@@ -16,7 +16,7 @@ public struct UIBaseView<Props: UIBaseViewProps, Content: ExpoSwiftUI.View<Props
   public var body: some View {
     Content(props: props)
       .applyAccessibilityIdentifier(props.testID)
-      .applyModifiers(props.modifiers, appContext: props.appContext, globalEventDispatcher: props.globalEventDispatcher)
+      .applyModifiers(props.modifiers, children: props.children, appContext: props.appContext, globalEventDispatcher: props.globalEventDispatcher)
   }
 }
 
@@ -31,7 +31,7 @@ public struct UIBaseViewModifier<Props: UIBaseViewProps>: ViewModifier {
   public func body(content: Content) -> some View {
     content
       .applyAccessibilityIdentifier(props.testID)
-      .applyModifiers(props.modifiers, appContext: props.appContext, globalEventDispatcher: props.globalEventDispatcher)
+      .applyModifiers(props.modifiers, children: props.children, appContext: props.appContext, globalEventDispatcher: props.globalEventDispatcher)
   }
 }
 

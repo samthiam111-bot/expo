@@ -1,6 +1,6 @@
 import { requireNativeView } from 'expo';
 
-import { createViewModifierEventListener } from '../modifiers/utils';
+import { processModifiers } from '../modifiers/processModifiers';
 import { type CommonViewModifierProps } from '../types';
 
 export type HStackProps = {
@@ -21,12 +21,12 @@ const HStackNativeView: React.ComponentType<HStackProps> = requireNativeView(
 );
 
 export function HStack(props: HStackProps) {
-  const { modifiers, ...restProps } = props;
+  const { modifiers, children, ...restProps } = props;
+  const { modifierProps, slotChildren } = processModifiers(modifiers);
   return (
-    <HStackNativeView
-      modifiers={modifiers}
-      {...(modifiers ? createViewModifierEventListener(modifiers) : undefined)}
-      {...restProps}
-    />
+    <HStackNativeView {...modifierProps} {...restProps}>
+      {children}
+      {slotChildren}
+    </HStackNativeView>
   );
 }

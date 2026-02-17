@@ -1,7 +1,7 @@
 import { requireNativeView } from 'expo';
 import React from 'react';
 
-import { createViewModifierEventListener } from '../modifiers/utils';
+import { processModifiers } from '../modifiers/processModifiers';
 import { type CommonViewModifierProps } from '../types';
 
 export type GridProps = {
@@ -25,11 +25,11 @@ export type GridProps = {
     | 'trailingFirstTextBaseline'
     | 'trailingLastTextBaseline';
   /**
-   * The vertical distance between each cell, given in points. The value is nil by default, which results in a default distance between cells that’s appropriate for the platform.
+   * The vertical distance between each cell, given in points. The value is nil by default, which results in a default distance between cells that's appropriate for the platform.
    */
   verticalSpacing?: number;
   /**
-   * The horizontal distance between each cell, given in points. The value is nil by default, which results in a default distance between cells that’s appropriate for the platform.
+   * The horizontal distance between each cell, given in points. The value is nil by default, which results in a default distance between cells that's appropriate for the platform.
    */
   horizontalSpacing?: number;
   children: React.ReactNode;
@@ -53,13 +53,11 @@ Grid.Row = GridRow;
  */
 export function Grid(props: GridProps) {
   const { modifiers, children, ...restProps } = props;
-
+  const { modifierProps, slotChildren } = processModifiers(modifiers);
   return (
-    <GridNativeView
-      modifiers={modifiers}
-      {...(modifiers ? createViewModifierEventListener(modifiers) : undefined)}
-      {...restProps}>
+    <GridNativeView {...modifierProps} {...restProps}>
       {children}
+      {slotChildren}
     </GridNativeView>
   );
 }

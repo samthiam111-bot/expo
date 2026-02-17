@@ -78,6 +78,7 @@ public final class ExpoUIModule: Module {
     View(LabelIcon.self)
     View(HostView.self)
     View(TextView.self)
+    View(ModifierSlotView.self)
 
     // MARK: - Expo UI Views
 

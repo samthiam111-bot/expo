@@ -1,4 +1,5 @@
 import {
+  Button,
   DisclosureGroup,
   Host,
   Section,
@@ -17,6 +18,7 @@ import {
 } from '@expo/ui/swift-ui';
 import {
   background,
+  confirmationDialog,
   cornerRadius,
   shadow,
   padding,
@@ -84,6 +86,9 @@ export default function ModifiersScreen() {
   const safeAreaInsets = useSafeAreaInsets();
   const [color, setColor] = useState<string | null>('blue');
 
+  const [showConfirmationDialog, setShowConfirmationDialog] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<string>('No action yet');
+
   const [hideScrollBackground, setHideScrollBackground] = useState(false);
 
   const [rowColor, setRowColor] = useState<string>('white');
@@ -150,6 +155,40 @@ export default function ModifiersScreen() {
                 </Text>
               ))}
             </Picker>
+          </Section>
+
+          {/* Confirmation Dialog modifier */}
+          <Section
+            title="Confirmation Dialog"
+            modifiers={[
+              confirmationDialog({
+                title: 'Choose an action',
+                isPresented: showConfirmationDialog,
+                onDismiss: () => setShowConfirmationDialog(false),
+                actions: (
+                  <>
+                    <Button
+                      label="Share"
+                      onPress={() => {
+                        setConfirmationResult('Shared!');
+                        setShowConfirmationDialog(false);
+                      }}
+                    />
+                    <Button
+                      label="Delete"
+                      role="destructive"
+                      onPress={() => {
+                        setConfirmationResult('Deleted!');
+                        setShowConfirmationDialog(false);
+                      }}
+                    />
+                  </>
+                ),
+                message: <Text>This action will affect the selected item.</Text>,
+              }),
+            ]}>
+            <Button label="Show Confirmation Dialog" onPress={() => setShowConfirmationDialog(true)} />
+            <Text>Result: {confirmationResult}</Text>
           </Section>
 
           {/* List modifiers */}
