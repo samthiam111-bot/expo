@@ -10,8 +10,11 @@
 
 - Key loader data by `contextKey` instead of URL pathname ([#43017](https://github.com/expo/expo/pull/43017) by [@hassankhan]
 - Fix `setResponseHeaders()` failing on responses with immutable headers ([#43111](https://github.com/expo/expo/pull/43111) by [@hassankhan](https://github.com/hassankhan))
+- Fix `origin()` to properly default to `null` and use `request.url` in development ([#43143](https://github.com/expo/expo/pull/43143) by [@kitten](https://github.com/kitten))
 
 ### 💡 Others
+
+- Add internal `preload` method to EAS and workerd request handlers ([#43171](https://github.com/expo/expo/pull/43171) by [@kitten](https://github.com/kitten))
 
 ## 55.0.3 — 2026-02-03
 

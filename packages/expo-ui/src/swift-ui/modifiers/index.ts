@@ -212,7 +212,7 @@ export const opacity = (value: number) => createModifier('opacity', { value });
  * @see Official [SwiftUI documentation](https://developer.apple.com/documentation/swiftui/view/clipshape(_:style:)).
  */
 export const clipShape = (
-  shape: 'rectangle' | 'circle' | 'roundedRectangle',
+  shape: 'rectangle' | 'circle' | 'capsule' | 'ellipse' | 'roundedRectangle',
   cornerRadius?: number
 ) => createModifier('clipShape', { shape, cornerRadius });
 
@@ -601,8 +601,10 @@ export const layoutPriority = (priority: number) => createModifier('layoutPriori
  * @param cornerRadius - Corner radius for rounded rectangle (default: `8`).
  * @see Official [SwiftUI documentation](https://developer.apple.com/documentation/swiftui/view/mask(_:)).
  */
-export const mask = (shape: 'rectangle' | 'circle' | 'roundedRectangle', cornerRadius?: number) =>
-  createModifier('mask', { shape, cornerRadius });
+export const mask = (
+  shape: 'rectangle' | 'circle' | 'capsule' | 'ellipse' | 'roundedRectangle',
+  cornerRadius?: number
+) => createModifier('mask', { shape, cornerRadius });
 
 /**
  * Overlays another view on top.
