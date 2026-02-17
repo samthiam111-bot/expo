@@ -306,7 +306,7 @@ jobs:
           gradle: 'true'
           yarn-workspace: 'true'
           yarn-tools: 'true'
-         react-native-gradle-downloads: 'true'
+          react-native-gradle-downloads: 'true'
       - name: 🧶 Install workspace node modules
         run: yarn install --frozen-lockfile
       - name: 🧶 Install image comparison server node modules
