@@ -296,7 +296,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/.ccache
-          key: ${{ runner.os }}-ccache-${{ hashFiles('**/*.gradle*', '**/CMakeLists.txt') }}
+          key: ${{ runner.os }}-ccache-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-ccache-
       - name: ♻️ Restore caches
