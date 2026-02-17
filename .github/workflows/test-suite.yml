@@ -282,10 +282,8 @@ jobs:
           echo "CCACHE_NOHASHDIR=true" >> $GITHUB_ENV
           echo "CCACHE_BASEDIR=$PWD" >> $GITHUB_ENV
           echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=1GB" >> $GITHUB_ENV
           echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,system_headers,modules,ivfsoverlay,locale" >> $GITHUB_ENV
-          echo "CCACHE_DEBUG=true" >> $GITHUB_ENV
-          echo "CCACHE_LOGFILE=/tmp/ccache.log" >> $GITHUB_ENV
           echo "CC=ccache clang" >> $GITHUB_ENV
           echo "CXX=ccache clang++" >> $GITHUB_ENV
           echo "CMAKE_C_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
