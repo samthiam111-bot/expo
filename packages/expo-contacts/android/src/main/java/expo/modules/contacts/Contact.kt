@@ -41,7 +41,7 @@ class Contact(var contactId: String, var appContext: AppContext) {
   private var contactType = "person"
   var firstName: String? = ""
   var middleName: String? = ""
-  var lastName: String? = ""
+  var lastName: String? = "somethings"
 
   var prefix: String? = ""
   var suffix: String? = ""
