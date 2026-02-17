@@ -282,12 +282,9 @@ jobs:
           echo "CCACHE_NOHASHDIR=true" >> $GITHUB_ENV
           echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV
           echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
-          echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,system_headers,modules,ivfsoverlay,locale,pch_defines,clang_index_store" >> $GITHUB_ENV
-          echo "CC=ccache clang" >> $GITHUB_ENV
-          echo "CXX=ccache clang++" >> $GITHUB_ENV
           echo "CMAKE_C_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
-          echo "NDK_CCACHE=$(which ccache)" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,pch_defines,clang_index_store" >> $GITHUB_ENV
       - name: ➕ Add `bin` to GITHUB_PATH
         run: echo "$(pwd)/bin" >> $GITHUB_PATH
       - name: 🧊 Restore ccache
