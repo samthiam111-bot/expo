@@ -11,7 +11,6 @@ import expo.modules.kotlin.weak
 import kotlin.reflect.KClass
 
 @DoNotStrip
-// Some test
 open class SharedObject(runtime: Runtime? = null) {
   constructor(appContext: AppContext) : this(appContext.runtime)
 
@@ -85,5 +84,6 @@ open class SharedObject(runtime: Runtime? = null) {
     return 0
   }
 }
+
 fun KClass<*>.isSharedObjectClass() =
   SharedObject::class.java.isAssignableFrom(this.java)
