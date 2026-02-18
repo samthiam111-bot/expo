@@ -284,14 +284,14 @@ jobs:
           echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
           echo "CMAKE_C_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
-          echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,pch_defines,clang_index_store" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,pch_defines" >> $GITHUB_ENV
       - name: ➕ Add `bin` to GITHUB_PATH
         run: echo "$(pwd)/bin" >> $GITHUB_PATH
       - name: 🧊 Restore ccache
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/.ccache
-          key: ${{ runner.os }}-ccache-${{ github.run_id }}
+          key: ${{ runner.os }}-ccache-${{ hashFiles('yarn.lock', '**/*.cpp', '**/*.h')}}
           restore-keys: |
             ${{ runner.os }}-ccache-
       - name: Reset ccache stats
