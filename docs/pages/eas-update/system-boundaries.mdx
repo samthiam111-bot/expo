@@ -3,13 +3,15 @@ title: System boundaries
 description: Learn about the key constraints of the EAS Update system.
 ---
 
-EAS Update changes only runtime JavaScript and static assets. It does not modify the compiled native binary. The following parts of your app are fixed at build time and cannot be changed through updates:
+EAS Update delivers changes to your app's runtime JavaScript and update-downloaded assets (images, fonts, etc.). It does not change anything that's embedded in the signed native app binary, which includes:
 
 - Native modules included in the binary
 - Platform entitlements and provisioning
 - Declared system permissions
 - Compiled frameworks and native code
 - Background modes and OS-level capabilities
+- App identity and embedded configuration (bundle ID/package name, app name/short name, URL schemes/deep-link schemes)
+- Store-facing, build-time resources (app icon, launch screen/splash screen)
 
 Updates always run inside the runtime environment defined by the original binary.
 
@@ -39,3 +41,5 @@ Each [EAS Build](/build/introduction/) is associated with a specific native runt
 - The capabilities declared at build time
 
 If you need to change native functionality, you must create a new build.
+
+You can use [Expo Fingerprint](/versions/latest/sdk/fingerprint) to track whether changes in your project affect the native runtime (for example, adding/removing native dependencies or changing native configuration). When the fingerprint changes, it’s a strong signal you should produce a new build rather than shipping an update.
