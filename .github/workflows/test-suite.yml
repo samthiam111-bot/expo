@@ -85,12 +85,39 @@ jobs:
         with:
           bundler-cache: true
           ruby-version: 3.2.2
+      - name: Setup ccache
+        run: |
+          brew install ccache
+
+          MKDIR_PATH=$HOME/.ccache_bin
+          mkdir -p $MKDIR_PATH
+
+          ln -sf $(which ccache) $MKDIR_PATH/clang
+          ln -sf $(which ccache) $MKDIR_PATH/clang++
+          ln -sf $(which ccache) $MKDIR_PATH/cc
+          ln -sf $(which ccache) $MKDIR_PATH/c++
+
+          echo "$MKDIR_PATH" >> $GITHUB_PATH
+
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_CPP2=true" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=pch_defines,time_macros,file_macro,include_file_mtime,include_file_ctime,file_stat_matches,modules,clang_index_store,system_headers,ivfsoverlay" >> $GITHUB_ENV
+          echo "CCACHE_DEPEND=true" >> $GITHUB_ENV
+          echo "CCACHE_FILECLONE=true" >> $GITHUB_ENV
+          echo "CCACHE_INODECACHE=true" >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
+
+          echo "CC=$MKDIR_PATH/clang" >> $GITHUB_ENV
+          echo "CXX=$MKDIR_PATH/clang++" >> $GITHUB_ENV
+          echo "LD=$MKDIR_PATH/clang++" >> $GITHUB_ENV
+          echo "LDPLUSPLUS=$MKDIR_PATH/clang++" >> $GITHUB_ENV
       - name: ♻️ Restore caches
         uses: ./.github/actions/expo-caches
         id: expo-caches
         with:
           yarn-workspace: 'true'
           yarn-tools: 'true'
+          ccache: 'true'
           bare-expo-pods: 'true'
       - name: 🧶 Install node modules in root dir
         run: yarn install --frozen-lockfile
@@ -138,6 +165,9 @@ jobs:
             ./scripts/start-ios-e2e-test.ts --build
           build-output: apps/bare-expo/ios/build/BareExpo.app
           artifact-name: bare-expo-ios-builds
+      - name: Show ccache stats
+        run: |
+          ccache -s -v
       - name: 🔔 Notify on Slack
         uses: ./.github/actions/slack-notify
         if: failure() && (github.event.ref == 'refs/heads/main' || startsWith(github.event.ref, 'refs/heads/sdk-'))
