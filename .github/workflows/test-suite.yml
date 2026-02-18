@@ -287,23 +287,17 @@ jobs:
           echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,pch_defines" >> $GITHUB_ENV
       - name: ➕ Add `bin` to GITHUB_PATH
         run: echo "$(pwd)/bin" >> $GITHUB_PATH
-      - name: 🧊 Restore ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/.ccache
-          key: ${{ runner.os }}-ccache-${{ hashFiles('yarn.lock', '**/*.cpp', '**/*.h')}}
-          restore-keys: |
-            ${{ runner.os }}-ccache-
-      - name: Reset ccache stats
-        run: ccache -z
       - name: ♻️ Restore caches
         uses: ./.github/actions/expo-caches
         id: expo-caches
         with:
+          ccache: 'true'
           gradle: 'true'
           yarn-workspace: 'true'
           yarn-tools: 'true'
           react-native-gradle-downloads: 'true'
+      - name: Reset ccache stats
+        run: ccache -z
       - name: 🧶 Install workspace node modules
         run: yarn install --frozen-lockfile
       - name: 🧶 Install image comparison server node modules
@@ -346,19 +340,9 @@ jobs:
             ./scripts/start-android-e2e-test.ts --build
           build-output: apps/bare-expo/android/app/build/outputs/apk/release
           artifact-name: bare-expo-android-builds
-      - name: Cache hit
+      - name: Show ccache stats
         run: |
           ccache -s -v
-          echo "=== CCACHE LOG ==="
-          cat /tmp/ccache.log || true
-      - name: Upload ccache logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: ccache-logs-android
-          include-hidden-files: true
-          path: |
-            /tmp/ccache.log
-            ${{ runner.temp }}/.ccache/**/*
       - name: 🔔 Notify on Slack
         uses: ./.github/actions/slack-notify
         if: failure() && (github.event.ref == 'refs/heads/main' || startsWith(github.event.ref, 'refs/heads/sdk-'))
