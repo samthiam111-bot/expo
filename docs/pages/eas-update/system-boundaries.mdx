@@ -17,7 +17,7 @@ Updates always run inside the runtime environment defined by the original binary
 
 Updates may be delivered as:
 
-- Javascript source code, or
+- JavaScript source code
 - Javascript bytecode for the [Hermes engine](https://reactnative.dev/docs/hermes)
 
 In both cases, the code runs inside the JavaScript engine that was compiled into the app at build time.
@@ -30,9 +30,9 @@ Updates do not:
 
 Hermes bytecode is simply an optimized format of Javascript that improves startup performance. It runs within the same runtime boundaries as standard JavaScript.
 
-## **Native Compatibility**
+## Native compatibility
 
-Each build is associated with a specific native runtime. Updates must stay compatible with:
+Each [EAS Build](/build/introduction/) is associated with a specific native runtime. Updates must stay compatible with:
 
 - The native modules included in the binary
 - The APIs those modules expose
