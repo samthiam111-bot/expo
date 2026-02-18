@@ -280,8 +280,7 @@ jobs:
         run: |
           echo "CCACHE_DIR=${{ runner.temp }}/.ccache" >> $GITHUB_ENV
           echo "CCACHE_NOHASHDIR=true" >> $GITHUB_ENV
-          # Base directory is needed to make sure ccache works correctly with Gradle's caching of build artifacts based on relative paths
-          echo "CCACHE_BASEDIR=/home/runner" >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV
           echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
           echo "CMAKE_C_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
@@ -295,6 +294,8 @@ jobs:
           key: ${{ runner.os }}-ccache-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-ccache-
+      - name: Reset ccache stats
+        run: ccache -z
       - name: ♻️ Restore caches
         uses: ./.github/actions/expo-caches
         id: expo-caches
