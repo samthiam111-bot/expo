@@ -1,0 +1,41 @@
+---
+title: System boundaries
+description: Learn about the key constraints of the EAS Update system
+---
+
+EAS Update changes only runtime JavaScript and static assets. It does not modify the compiled native binary. The following parts of your app are fixed at build time and cannot be changed through updates:
+
+- Native modules included in the binary
+- Platform entitlements and provisioning
+- Declared system permissions
+- Compiled frameworks and native code
+- Background modes and OS-level capabilities
+
+Updates always run inside the runtime environment defined by the original binary.
+
+## JavaScript and Hermes Bytecode
+
+Updates may be delivered as:
+
+- Javascript source code, or
+- Javascript bytecode for the [Hermes engine](https://reactnative.dev/docs/hermes)
+
+In both cases, the code runs inside the JavaScript engine that was compiled into the app at build time.
+
+Updates do not:
+
+- Introduce native code
+- Replace the JavaScript engine
+- Modify system capabilities
+
+Hermes bytecode is simply an optimized format of Javascript that improves startup performance. It runs within the same runtime boundaries as standard JavaScript.
+
+## **Native Compatibility**
+
+Each build is associated with a specific native runtime. Updates must stay compatible with:
+
+- The native modules included in the binary
+- The APIs those modules expose
+- The capabilities declared at build time
+
+If you need to change native functionality, you must create a new build.

@@ -550,6 +550,7 @@ export const eas = [
       makePage('eas-update/how-it-works.mdx'),
       makePage('eas-update/eas-cli.mdx'),
       makePage('eas-update/runtime-versions.mdx'),
+      makePage('eas-update/system-boundaries.mdx'),
     ]),
     makeGroup('Troubleshooting', [
       makePage('eas-update/debug.mdx'),
