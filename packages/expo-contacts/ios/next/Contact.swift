@@ -7,7 +7,7 @@ class ContactNext: SharedObject {
   private let imageService: ImageService
   private let imageMapper: ImageMapper
   private let thumbnailMapper: ImageMapper
-
+  // change fingerprint
   init(
     id: String,
     contactRepository: ContactRepository,

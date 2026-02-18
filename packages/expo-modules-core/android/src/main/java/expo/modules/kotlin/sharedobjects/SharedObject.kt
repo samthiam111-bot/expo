@@ -84,6 +84,6 @@ open class SharedObject(runtime: Runtime? = null) {
     return 0
   }
 }
-
+//Change fingerprint
 fun KClass<*>.isSharedObjectClass() =
   SharedObject::class.java.isAssignableFrom(this.java)
