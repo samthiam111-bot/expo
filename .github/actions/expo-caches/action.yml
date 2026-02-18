@@ -36,6 +36,9 @@ inputs:
     description: 'NDK version used'
     default: '23.1.7779620'
     required: false
+  ccache:
+    description: 'Restore ccache'
+    required: false
   git-lfs:
     description: 'Restore Git LFS cache'
     required: false
