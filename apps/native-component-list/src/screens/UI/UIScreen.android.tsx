@@ -1,6 +1,6 @@
 import { optionalRequire } from '../../navigation/routeBuilder';
 import ComponentListScreen, { componentScreensToListElements } from '../ComponentListScreen';
-import { SearchBarScreens } from './SearchBarScreen';
+import { SearchBarScreens } from './SearchBarListScreen';
 
 export const UIScreens = [
   {
@@ -136,7 +136,7 @@ export const UIScreens = [
     route: 'ui/searchbar',
     options: {},
     getComponent() {
-      return optionalRequire(() => require('./SearchBarScreen'));
+      return optionalRequire(() => require('./SearchBarListScreen'));
     },
   },
   ...SearchBarScreens,
