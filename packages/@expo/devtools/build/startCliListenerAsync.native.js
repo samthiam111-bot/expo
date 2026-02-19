@@ -1,6 +1,5 @@
-import * as Application from 'expo-application';
-import * as DeviceInfo from 'expo-device';
-import { Platform } from 'expo-modules-core';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { getDevToolsPluginClientAsync } from './DevToolsPluginClientFactory';
 /**
  * Starts a new imperative listener for cli plugins. This is an alternative to the useDevToolsPlugin
@@ -17,13 +16,8 @@ export const startCliListenerAsync = async (pluginName) => {
         let clientRef = null;
         const listenerRemovals = [];
         const getDeviceName = () => {
-            return Platform.OS === 'android'
-                ? DeviceInfo.deviceName +
-                    ' - ' +
-                    DeviceInfo.osVersion +
-                    ' - API ' +
-                    DeviceInfo.platformApiLevel
-                : DeviceInfo.deviceName;
+            const name = Constants.deviceName ?? 'Unknown device';
+            return Platform.OS === 'android' ? name + ' - ' + Platform.Version : name;
         };
         const client = await getDevToolsPluginClientAsync(pluginName);
         if (clientRef != null) {
@@ -58,7 +52,9 @@ export const startCliListenerAsync = async (pluginName) => {
             await client.sendMessage(eventName, {
                 message,
                 deviceName: getDeviceName(),
-                applicationId: Application.applicationId,
+                applicationId: Platform.OS === 'ios'
+                    ? Constants.expoConfig?.ios?.bundleIdentifier
+                    : Constants.expoConfig?.android?.package,
             });
         };
         return { addMessageListener, sendMessageAsync };
