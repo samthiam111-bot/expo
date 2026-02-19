@@ -87,6 +87,7 @@ jobs:
           ruby-version: 3.2.2
       - name: Setup ccache
         run: |
+          ccache --version
           brew install ccache
 
           MKDIR_PATH=$HOME/.ccache_bin
@@ -306,6 +307,7 @@ jobs:
           java-version: '17'
       - name: Install ccache
         run: |
+          ccache --version
           sudo apt-get update
           sudo apt-get install -y ccache
       - name: Configure ccache & Env
