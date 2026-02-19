@@ -119,6 +119,8 @@ jobs:
           yarn-tools: 'true'
           ccache: 'true'
           bare-expo-pods: 'true'
+      - name: Reset ccache stats
+        run: ccache -z
       - name: 🧶 Install node modules in root dir
         run: yarn install --frozen-lockfile
       - name: 🕵️ Debug CocoaPods lockfiles
