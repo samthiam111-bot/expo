@@ -199,7 +199,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/.ccache
-        key: ${{ runner.os }}-ccache-${{ hashFiles('yarn.lock', 'packages/**/*.cpp', 'packages/**/*.h')}}
+        key: ${{ runner.os }}-ccache-${{ hashFiles('yarn.lock', 'packages/**/*.cpp', 'packages/**/*.h', 'packages/**/*.mm', 'packages/**/*.m') }}
         restore-keys: ${{ runner.os }}-ccache-
 
     - name: 🔍️ Get cache key of Git LFS files

@@ -313,6 +313,8 @@ jobs:
         run: |
           # It must be the same as in .github/actions/expo-caches/action.yml 
           echo "CCACHE_DIR=${{ runner.temp }}/.ccache" >> $GITHUB_ENV
+          # By default ccache includes mtime of a compiler in hashes, on ci we can't guarantee compiler time
+          echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
           # Calculate hash based on a relative path - this prevents cache misses when an absolute path changes.
           echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV
           # Default is 5GB, this cache takes only ~300MB
