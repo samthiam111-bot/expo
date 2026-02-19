@@ -101,7 +101,7 @@ jobs:
 
           echo "CCACHE_DIR=${{ runner.temp }}/.ccache" >> $GITHUB_ENV
           echo "CCACHE_CPP2=true" >> $GITHUB_ENV
-          echo "CCACHE_SLOPPINESS=pch_defines,time_macros,file_macro,include_file_mtime,include_file_ctime,file_stat_matches,modules,clang_index_store,system_headers,ivfsoverlay" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=time_macros,file_macro,include_file_mtime,include_file_ctime,file_stat_matches,modules,clang_index_store,system_headers,ivfsoverlay" >> $GITHUB_ENV
           echo "CCACHE_DEPEND=true" >> $GITHUB_ENV
           echo "CCACHE_FILECLONE=true" >> $GITHUB_ENV
           echo "CCACHE_INODECACHE=true" >> $GITHUB_ENV
@@ -317,7 +317,7 @@ jobs:
           echo "CCACHE_MAXSIZE=1G" >> $GITHUB_ENV
           echo "CMAKE_C_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=$(which ccache)" >> $GITHUB_ENV
-          echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,pch_defines" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=file_stat_matches,include_file_ctime,include_file_mtime,time_macros " >> $GITHUB_ENV
       - name: ➕ Add `bin` to GITHUB_PATH
         run: echo "$(pwd)/bin" >> $GITHUB_PATH
       - name: ♻️ Restore caches
