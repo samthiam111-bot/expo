@@ -54,14 +54,29 @@ internal final class JSValueEncoder: Encoder {
 /**
  An object that holds a JS value that could be overriden by the encoding container.
  */
-private final class JSValueHolder {
+internal final class JSValueHolder {
   var value: JavaScriptValue = .undefined
 }
 
 /**
  Single value container used to encode primitive values, including optionals.
  */
-private struct JSValueEncodingContainer: SingleValueEncodingContainer {
+internal struct JSValueEncodingContainer: SingleValueEncodingContainer {
+  internal static let iso8601formatStyle: Date.ISO8601FormatStyle = {
+    var style = Date.ISO8601FormatStyle.iso8601
+      .year()
+      .month()
+      .day()
+      .timeZone(separator: .omitted)
+      .time(includingFractionalSeconds: true)
+
+    // Include the timezone information in the ISO8601 string,
+    // otherwise it refers to the UTC time.
+    style.timeZone = .current
+
+    return style
+  }()
+
   private weak var runtime: JavaScriptRuntime?
   private let valueHolder: JSValueHolder
 
@@ -77,6 +92,21 @@ private struct JSValueEncodingContainer: SingleValueEncodingContainer {
 
   mutating func encodeNil() throws {
     self.valueHolder.value = .null
+  }
+
+  mutating func encode(_ value: Date) throws {
+    guard let runtime else {
+      // Do nothing when the runtime is already deallocated
+      return
+    }
+    let string = value.formatted(Self.iso8601formatStyle)
+    let jsDateClass = try runtime.global().getProperty("Date").asFunction()
+
+    self.valueHolder.value = jsDateClass.call(
+      withArguments: [JavaScriptValue.string(string, runtime: runtime)],
+      thisObject: nil,
+      asConstructor: true
+    )
   }
 
   mutating func encode<ValueType: Encodable>(_ value: ValueType) throws {
@@ -163,6 +193,9 @@ private struct JSArrayEncodingContainer: UnkeyedEncodingContainer {
   init(to valueHolder: JSValueHolder, runtime: JavaScriptRuntime) {
     self.runtime = runtime
     self.valueHolder = valueHolder
+
+    // Initialize the value with an empty array, otherwise the encoded value would be `undefined`.
+    self.valueHolder.value = JavaScriptValue.from([], runtime: runtime)
   }
 
   // MARK: - UnkeyedEncodingContainer
@@ -197,5 +230,13 @@ private struct JSArrayEncodingContainer: UnkeyedEncodingContainer {
 
   mutating func superEncoder() -> any Encoder {
     fatalError("superEncoder() is not implemented in JSValueEncoder")
+  }
+}
+
+extension Date {
+  func encode(to encoder: JSValueEncoder) throws {
+    if var container = encoder.singleValueContainer() as? JSValueEncodingContainer {
+      try container.encode(self)
+    }
   }
 }
