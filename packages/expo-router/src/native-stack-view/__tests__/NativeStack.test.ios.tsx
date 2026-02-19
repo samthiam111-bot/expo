@@ -6,24 +6,28 @@ import { router } from '../../imperative-api';
 import { renderRouter, testRouter } from '../../testing-library';
 import { NativeStack } from '../NativeStack';
 
-jest.mock('react-native-screens', () => {
-  const actualScreens = jest.requireActual(
-    'react-native-screens'
-  ) as typeof import('react-native-screens');
+jest.mock('react-native-screens/experimental', () => {
+  const actual = jest.requireActual(
+    'react-native-screens/experimental'
+  ) as typeof import('react-native-screens/experimental');
+  const MockedScreen = jest.fn((props: any) => <actual.Stack.Screen {...props} />);
   return {
-    ...actualScreens,
-    ScreenStackItem: jest.fn((props) => <actualScreens.ScreenStackItem {...props} />),
+    ...actual,
+    Stack: {
+      ...actual.Stack,
+      Screen: MockedScreen,
+    },
   };
 });
 
-const { ScreenStackItem } = jest.requireMock(
-  'react-native-screens'
-) as typeof import('react-native-screens');
-const MockedScreenStackItem = ScreenStackItem as jest.MockedFunction<typeof ScreenStackItem>;
+const { Stack } = jest.requireMock(
+  'react-native-screens/experimental'
+) as typeof import('react-native-screens/experimental');
+const MockedStackScreen = Stack.Screen as jest.MockedFunction<typeof Stack.Screen>;
 
 describe('NativeStack', () => {
   beforeEach(() => {
-    MockedScreenStackItem.mockClear();
+    MockedStackScreen.mockClear();
   });
 
   describe('basic navigation', () => {
@@ -103,40 +107,8 @@ describe('NativeStack', () => {
     });
   });
 
-  describe('header config', () => {
-    it('passes title from options to headerConfig', () => {
-      renderRouter({
-        _layout: () => (
-          <NativeStack>
-            <NativeStack.Screen name="index" options={{ title: 'Home' }} />
-          </NativeStack>
-        ),
-        index: () => <Text testID="index">Index</Text>,
-      });
-
-      expect(screen.getByTestId('index')).toBeVisible();
-      expect(MockedScreenStackItem.mock.calls[0][0].headerConfig?.title).toBe('Home');
-    });
-
-    it('uses route name as fallback title', () => {
-      renderRouter({
-        _layout: () => <NativeStack />,
-        index: () => <Text testID="index">Index</Text>,
-      });
-
-      expect(MockedScreenStackItem.mock.calls[0][0].headerConfig?.title).toBe('index');
-    });
-
-    it('hides back button on first screen', () => {
-      renderRouter({
-        _layout: () => <NativeStack />,
-        index: () => <Text testID="index">Index</Text>,
-      });
-
-      expect(MockedScreenStackItem.mock.calls[0][0].headerConfig?.hideBackButton).toBe(true);
-    });
-
-    it('shows back button on pushed screen', () => {
+  describe('activityMode', () => {
+    it('sets detached for non-focused screens by default', () => {
       renderRouter({
         _layout: () => <NativeStack />,
         index: () => <Text testID="index">Index</Text>,
@@ -145,121 +117,28 @@ describe('NativeStack', () => {
 
       act(() => router.push('/details'));
 
-      // Find the call for the details screen (the second ScreenStackItem rendered after push)
-      const detailsCalls = MockedScreenStackItem.mock.calls.filter(
-        (call) => call[0].headerConfig?.title === 'details'
+      // After pushing, the index screen should be detached (frozen)
+      const indexCalls = MockedStackScreen.mock.calls.filter((call) =>
+        call[0].screenKey?.includes('index')
       );
-      expect(detailsCalls.length).toBeGreaterThan(0);
-      expect(detailsCalls[detailsCalls.length - 1][0].headerConfig?.hideBackButton).toBe(false);
-    });
-
-    it('passes hidden when headerShown is false', () => {
-      renderRouter({
-        _layout: () => (
-          <NativeStack>
-            <NativeStack.Screen name="index" options={{ headerShown: false }} />
-          </NativeStack>
-        ),
-        index: () => <Text testID="index">Index</Text>,
-      });
-
-      expect(MockedScreenStackItem.mock.calls[0][0].headerConfig?.hidden).toBe(true);
-    });
-  });
-
-  describe('presentation', () => {
-    it('first screen always has stackPresentation push', () => {
-      renderRouter({
-        _layout: () => <NativeStack screenOptions={{ presentation: 'modal' }} />,
-        index: () => <Text testID="index">Index</Text>,
-      });
-
-      expect(MockedScreenStackItem.mock.calls[0][0].stackPresentation).toBe('push');
-    });
-
-    it('maps card presentation to push', () => {
-      renderRouter({
-        _layout: () => <NativeStack />,
-        index: () => <Text testID="index">Index</Text>,
-        details: () => <Text testID="details">Details</Text>,
-      });
-
-      act(() => router.push('/details'));
-
-      const detailsCalls = MockedScreenStackItem.mock.calls.filter(
-        (call) => call[0].headerConfig?.title === 'details'
-      );
-      expect(detailsCalls[detailsCalls.length - 1][0].stackPresentation).toBe('push');
-    });
-
-    it('passes modal presentation to ScreenStackItem', () => {
-      renderRouter({
-        _layout: () => (
-          <NativeStack>
-            <NativeStack.Screen name="index" />
-            <NativeStack.Screen name="modal" options={{ presentation: 'modal' }} />
-          </NativeStack>
-        ),
-        index: () => <Text testID="index">Index</Text>,
-        modal: () => <Text testID="modal">Modal</Text>,
-      });
-
-      act(() => router.push('/modal'));
-
-      const modalCalls = MockedScreenStackItem.mock.calls.filter(
-        (call) => call[0].headerConfig?.title === 'modal'
-      );
-      expect(modalCalls[modalCalls.length - 1][0].stackPresentation).toBe('modal');
-    });
-  });
-
-  describe('screenOptions', () => {
-    it('applies screenOptions to all screens', () => {
-      renderRouter({
-        _layout: () => <NativeStack screenOptions={{ headerShown: false }} />,
-        index: () => <Text testID="index">Index</Text>,
-        details: () => <Text testID="details">Details</Text>,
-      });
-
-      expect(MockedScreenStackItem.mock.calls[0][0].headerConfig?.hidden).toBe(true);
-
-      act(() => router.push('/details'));
-
-      const detailsCalls = MockedScreenStackItem.mock.calls.filter(
-        (call) => call[0].headerConfig?.title === 'details'
-      );
-      expect(detailsCalls[detailsCalls.length - 1][0].headerConfig?.hidden).toBe(true);
-    });
-
-    it('per-screen options override screenOptions', () => {
-      renderRouter({
-        _layout: () => (
-          <NativeStack screenOptions={{ title: 'Default' }}>
-            <NativeStack.Screen name="index" options={{ title: 'Custom Home' }} />
-          </NativeStack>
-        ),
-        index: () => <Text testID="index">Index</Text>,
-      });
-
-      expect(MockedScreenStackItem.mock.calls[0][0].headerConfig?.title).toBe('Custom Home');
-    });
-  });
-
-  describe('freezeOnBlur', () => {
-    it('freezes non-focused screens by default', () => {
-      renderRouter({
-        _layout: () => <NativeStack />,
-        index: () => <Text testID="index">Index</Text>,
-        details: () => <Text testID="details">Details</Text>,
-      });
-
-      act(() => router.push('/details'));
-
-      // After pushing, the index screen should be frozen
-      const lastRender = MockedScreenStackItem.mock.calls;
-      const indexCalls = lastRender.filter((call) => call[0].headerConfig?.title === 'index');
       const lastIndexCall = indexCalls[indexCalls.length - 1];
-      expect(lastIndexCall[0].shouldFreeze).toBe(true);
+      expect(lastIndexCall[0].activityMode).toBe('detached');
+    });
+
+    it('sets attached for focused screen', () => {
+      renderRouter({
+        _layout: () => <NativeStack />,
+        index: () => <Text testID="index">Index</Text>,
+        details: () => <Text testID="details">Details</Text>,
+      });
+
+      act(() => router.push('/details'));
+
+      const detailsCalls = MockedStackScreen.mock.calls.filter((call) =>
+        call[0].screenKey?.includes('details')
+      );
+      const lastDetailsCall = detailsCalls[detailsCalls.length - 1];
+      expect(lastDetailsCall[0].activityMode).toBe('attached');
     });
 
     it('respects freezeOnBlur: false', () => {
@@ -276,11 +155,30 @@ describe('NativeStack', () => {
 
       act(() => router.push('/details'));
 
-      const indexCalls = MockedScreenStackItem.mock.calls.filter(
-        (call) => call[0].headerConfig?.title === 'index'
+      const indexCalls = MockedStackScreen.mock.calls.filter((call) =>
+        call[0].screenKey?.includes('index')
       );
       const lastIndexCall = indexCalls[indexCalls.length - 1];
-      expect(lastIndexCall[0].shouldFreeze).toBe(false);
+      expect(lastIndexCall[0].activityMode).toBe('attached');
+    });
+  });
+
+  describe('screenOptions', () => {
+    it('applies screenOptions to all screens', () => {
+      renderRouter({
+        _layout: () => <NativeStack screenOptions={{ freezeOnBlur: false }} />,
+        index: () => <Text testID="index">Index</Text>,
+        details: () => <Text testID="details">Details</Text>,
+      });
+
+      act(() => router.push('/details'));
+
+      // With freezeOnBlur: false, index should stay attached even when not focused
+      const indexCalls = MockedStackScreen.mock.calls.filter((call) =>
+        call[0].screenKey?.includes('index')
+      );
+      const lastIndexCall = indexCalls[indexCalls.length - 1];
+      expect(lastIndexCall[0].activityMode).toBe('attached');
     });
   });
 

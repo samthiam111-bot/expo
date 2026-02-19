@@ -5,3 +5,4 @@ export type {
   NativeStackPresentation,
 } from './types';
 export { NativeStack } from './NativeStack';
+export { NativeStackRouter } from './NativeStackRouter';

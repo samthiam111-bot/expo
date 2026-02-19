@@ -175,8 +175,6 @@ export interface NativeStackOptions {
 export type NativeStackNavigationEventMap = {
   transitionStart: { data: { closing: boolean } };
   transitionEnd: { data: { closing: boolean } };
-  gestureCancel: { data: undefined };
-  sheetDetentChange: { data: { index: number; stable: boolean } };
 };
 
 /**

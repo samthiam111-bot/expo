@@ -145,15 +145,6 @@ export type NativeStackNavigationEventMap = {
             closing: boolean;
         };
     };
-    gestureCancel: {
-        data: undefined;
-    };
-    sheetDetentChange: {
-        data: {
-            index: number;
-            stable: boolean;
-        };
-    };
 };
 /**
  * Props for the `NativeStack` component.

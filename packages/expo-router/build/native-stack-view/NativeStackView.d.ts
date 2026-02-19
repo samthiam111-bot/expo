@@ -1,6 +1,6 @@
-import { type ParamListBase, type StackNavigationState } from '@react-navigation/native';
 import React from 'react';
 import type { NativeStackOptions } from './types';
+import type { NativeStackState } from './NativeStackRouter';
 type Descriptor = {
     options: NativeStackOptions;
     render: () => React.ReactNode;
@@ -11,7 +11,7 @@ type Descriptor = {
     navigation: any;
 };
 type Props = {
-    state: StackNavigationState<ParamListBase>;
+    state: NativeStackState;
     navigation: any;
     descriptors: Record<string, Descriptor>;
 };

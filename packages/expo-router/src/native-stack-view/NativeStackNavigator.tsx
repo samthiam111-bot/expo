@@ -1,14 +1,12 @@
 'use client';
 
-import {
-  createNavigatorFactory,
-  type ParamListBase,
-  StackRouter,
-  type StackNavigationState,
-  type StackRouterOptions,
-  useNavigationBuilder,
-} from '@react-navigation/native';
+import { createNavigatorFactory, useNavigationBuilder } from '@react-navigation/native';
 
+import {
+  NativeStackRouter,
+  type NativeStackRouterOptions,
+  type NativeStackState,
+} from './NativeStackRouter';
 import { NativeStackView } from './NativeStackView';
 import type { NativeStackNavigationEventMap, NativeStackOptions, NativeStackProps } from './types';
 import { withLayoutContext } from '../layouts/withLayoutContext';
@@ -19,12 +17,12 @@ export function NativeStackNavigator({
   screenOptions,
 }: NativeStackProps) {
   const { state, descriptors, navigation, NavigationContent } = useNavigationBuilder<
-    StackNavigationState<ParamListBase>,
-    StackRouterOptions,
+    NativeStackState,
+    NativeStackRouterOptions,
     Record<string, (...args: unknown[]) => void>,
     NativeStackOptions,
     NativeStackNavigationEventMap
-  >(StackRouter, {
+  >(NativeStackRouter, {
     children,
     screenListeners,
     screenOptions,
@@ -42,6 +40,6 @@ const createNativeStackNavigatorFactory = createNavigatorFactory(NativeStackNavi
 export const NativeStackWithContext = withLayoutContext<
   NativeStackOptions,
   typeof NativeStackNavigator,
-  StackNavigationState<ParamListBase>,
+  NativeStackState,
   NativeStackNavigationEventMap
 >(createNativeStackNavigatorFactory().Navigator);
