@@ -10,6 +10,8 @@
 
 ### 💡 Others
 
+- Replace `minimatch` with `picomatch` ([#43323](https://github.com/expo/expo/pull/43323) by [@kitten](https://github.com/kitten))
+
 ## 54.0.14 — 2026-01-20
 
 ### 🐛 Bug fixes
