@@ -11,6 +11,7 @@ namespace expo {
 namespace gl_cpp {
 
 GLuint bytesPerPixel(GLenum type, GLenum format) {
+// Test miss: 2026-02-20 13:15
   int bytesPerComponent = 0;
   switch (type) {
     case GL_UNSIGNED_BYTE:

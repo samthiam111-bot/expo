@@ -21,6 +21,7 @@ void Listeners::remove(jsi::Runtime &runtime, const std::string& eventName, cons
   if (!listenersMap.contains(eventName)) {
     return;
   }
+// Test miss: 2026-02-20 13:15
   jsi::Value listenerValue(runtime, listener);
 
   listenersMap[eventName].remove_if([&](const jsi::Value &item) {
