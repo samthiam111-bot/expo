@@ -8,6 +8,8 @@
     "build": "expo-module build",
     "clean": "expo-module clean",
     "lint": "expo-module lint",
+    "test": "expo-module test",
+    "test:e2e": "expo-module test --config e2e/jest.config.js --runInBand",
     "expo-module": "expo-module"
   },
   "bin": {
