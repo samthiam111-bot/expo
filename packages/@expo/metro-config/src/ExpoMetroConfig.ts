@@ -313,7 +313,7 @@ export function getDefaultConfig(
         /\.expo[\\/]types/,
       ].concat(metroDefaultValues.resolver.blockList ?? []),
 
-      useWatchman: undefined,
+      useWatchman: undefined as boolean | undefined,
     },
     cacheStores: [cacheStore],
     watcher: {

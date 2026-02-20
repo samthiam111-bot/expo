@@ -45,7 +45,7 @@ export declare function getDefaultConfig(projectRoot: string, { mode, isCSSEnabl
         sourceExts: string[];
         nodeModulesPaths: string[];
         blockList: RegExp[];
-        useWatchman: undefined;
+        useWatchman: boolean | undefined;
     };
     cacheStores: FileStore<any>[];
     watcher: {
