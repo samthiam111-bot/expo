@@ -31,7 +31,7 @@ class ContactNext: SharedObject {
     contactId: id,
     contactRepository: contactRepository
   )
-
+  // Test
   lazy var givenName = properties.make(mapper: StringMapper(descriptor: CNContactGivenNameKey, keyPath: \.givenName))
   lazy var middleName = properties.make(mapper: StringMapper(descriptor: CNContactMiddleNameKey, keyPath: \.middleName))
   lazy var familyName = properties.make(mapper: StringMapper(descriptor: CNContactFamilyNameKey, keyPath: \.familyName))
