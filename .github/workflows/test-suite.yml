@@ -187,7 +187,7 @@ jobs:
           # We exclude ctime and mtime so the cache is hit based on file content.
           # time_macros might help if in included modules there are macros like __TIME__ which would trigger a cache miss.
           # modules, clang_index_store, system_headers, and ivfsoverlay are Xcode-specific options.
-          echo "CCACHE_SLOPPINESS=include_file_mtime,include_file_ctime,time_macros,modules,clang_index_store,system_headers,ivfsoverlay" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=include_file_mtime,include_file_ctime,time_macros" >> $GITHUB_ENV
 
           # Speeds up the process on cache misses by skipping the preprocessing step.
           echo "CCACHE_DEPEND=true" >> $GITHUB_ENV
