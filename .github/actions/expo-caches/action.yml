@@ -208,9 +208,7 @@ runs:
       with:
         path: ${{ runner.temp }}/.ccache
         key: ${{ runner.os }}-ccache-${{ steps.xcode-version.outputs.hash }}-${{ hashFiles('**/Podfile.lock', 'yarn.lock', 'packages/**/*.c', 'packages/**/*.cpp', 'packages/**/*.h', 'packages/**/*.mm', 'packages/**/*.m') }}
-        restore-keys: |
-          ${{ runner.os }}-ccache-${{ steps.xcode-version.outputs.hash }}-
-          ${{ runner.os }}-ccache-
+        restore-keys: ${{ runner.os }}-ccache-${{ steps.xcode-version.outputs.hash }}-
 
     - name: ♻️ Restore ccache (Android)
       if: inputs.ccache == 'true' && runner.os == 'Linux'
