@@ -278,9 +278,7 @@ class LinkZoomTransitionEnabler: LinkZoomExpoView {
       // When dismissalBoundsRect changes, re-setup the zoom transition
       // to include/exclude interactiveDismissShouldBegin callback
       if superview != nil {
-        DispatchQueue.main.async {
-          self.setupZoomTransition()
-        }
+        self.setupZoomTransition()
       }
     }
   }
@@ -399,12 +397,12 @@ class LinkZoomTransitionEnabler: LinkZoomExpoView {
   }
 
   private func findViewController() -> RNSScreen? {
-    var responder: UIResponder? = self
-    while let r = responder {
-      if let r = r as? RNSScreen {
-        return r
+    var view: UIView? = self
+    while let v = view {
+      if let r = v as? RNSScreenView {
+        return r.controller
       }
-      responder = r.next
+      view = v.reactSuperview()
     }
     return nil
   }
