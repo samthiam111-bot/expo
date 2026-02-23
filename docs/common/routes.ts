@@ -109,10 +109,13 @@ function getAncestorUrl(node: NavigationRoute): string | undefined {
   }
 
   for (const child of node.children as NavigationRoute[]) {
-    if (child.hidden) {
+    if (!child || child.hidden) {
       continue;
     }
     if (child.type === 'page' && child.href) {
+      if ((child as NavigationRoute & { isIndex?: boolean }).isIndex) {
+        return `https://docs.expo.dev${child.href}`;
+      }
       const parts = child.href.split('/');
       parts.pop();
       const parentPath = parts.join('/') || '/';
@@ -136,7 +139,7 @@ export function getBreadcrumbTrail(
 
   function search(nodes: NavigationRoute[] | NavigationRouteWithSection[]): boolean {
     for (const node of nodes) {
-      if (node.hidden) {
+      if (!node || node.hidden) {
         continue;
       }
 
@@ -158,19 +161,21 @@ export function getBreadcrumbTrail(
 
   search(routes);
 
-  return trail.map((item, index) => {
-    const isLast = index === trail.length - 1;
-    if (isLast) {
-      return { name: item.name };
-    }
+  return trail
+    .filter(item => item.name !== '')
+    .map((item, index, filtered) => {
+      const isLast = index === filtered.length - 1;
+      if (isLast) {
+        return { name: item.name };
+      }
 
-    const url =
-      item.node.type === 'page'
-        ? `https://docs.expo.dev${item.node.href}`
-        : getAncestorUrl(item.node);
+      const url =
+        item.node.type === 'page'
+          ? `https://docs.expo.dev${item.node.href}`
+          : getAncestorUrl(item.node);
 
-    return { name: item.name, ...(url ? { url } : {}) };
-  });
+      return { name: item.name, ...(url ? { url } : {}) };
+    });
 }
 
 export function appendSectionToRoute(route?: NavigationRouteWithSection) {
