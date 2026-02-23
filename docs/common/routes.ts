@@ -103,6 +103,76 @@ export const isRouteActive = (
   return linkUrl === stripVersionFromPath(pathname) || linkUrl === stripVersionFromPath(asPath);
 };
 
+function getAncestorUrl(node: NavigationRoute): string | undefined {
+  if (!node.children) {
+    return undefined;
+  }
+
+  for (const child of node.children as NavigationRoute[]) {
+    if (child.hidden) {
+      continue;
+    }
+    if (child.type === 'page' && child.href) {
+      const parts = child.href.split('/');
+      parts.pop();
+      const parentPath = parts.join('/') || '/';
+      return `https://docs.expo.dev${parentPath}`;
+    }
+    if (child.children) {
+      const url = getAncestorUrl(child);
+      if (url) {
+        return url;
+      }
+    }
+  }
+  return undefined;
+}
+
+export function getBreadcrumbTrail(
+  routes: NavigationRoute[],
+  pathname: string
+): { name: string; url?: string }[] {
+  const trail: { name: string; node: NavigationRoute }[] = [];
+
+  function search(nodes: NavigationRoute[] | NavigationRouteWithSection[]): boolean {
+    for (const node of nodes) {
+      if (node.hidden) {
+        continue;
+      }
+
+      if (node.type === 'page') {
+        if (node.href === pathname) {
+          trail.push({ name: node.sidebarTitle ?? node.name, node });
+          return true;
+        }
+      } else if (node.children) {
+        trail.push({ name: node.name, node });
+        if (search(node.children)) {
+          return true;
+        }
+        trail.pop();
+      }
+    }
+    return false;
+  }
+
+  search(routes);
+
+  return trail.map((item, index) => {
+    const isLast = index === trail.length - 1;
+    if (isLast) {
+      return { name: item.name };
+    }
+
+    const url =
+      item.node.type === 'page'
+        ? `https://docs.expo.dev${item.node.href}`
+        : getAncestorUrl(item.node);
+
+    return { name: item.name, ...(url ? { url } : {}) };
+  });
+}
+
 export function appendSectionToRoute(route?: NavigationRouteWithSection) {
   if (route?.children) {
     return route.children.map((entry: NavigationRouteWithSection) =>
