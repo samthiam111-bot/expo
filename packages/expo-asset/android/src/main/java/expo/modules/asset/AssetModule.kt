@@ -51,7 +51,8 @@ class AssetModule : Module() {
     }
 
     if (!appContext.filePermission.getPathPermissions(context, requireNotNull(localUrl.parent))
-        .contains(FilePermissionService.Permission.WRITE)) {
+        .contains(FilePermissionService.Permission.WRITE)
+    ) {
       throw UnableToDownloadAssetException(uri.toString())
     }
 
