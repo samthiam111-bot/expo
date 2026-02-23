@@ -19,7 +19,7 @@ export const event = events('env', (t) => [
     mode: 'development' | 'production';
   }>(),
   t.event<'load', {
-    mode: string;
+    mode: string | undefined;
     files: string[];
     env: Record<string, string | undefined>;
   }>(),
