@@ -5,7 +5,9 @@ import chalk from 'chalk';
 import { AppIdResolver } from './AppIdResolver';
 import { DeviceManager } from './DeviceManager';
 import { Log } from '../../log';
+import { waitForActionAsync } from '../../utils/delay';
 import { CommandError, UnimplementedError } from '../../utils/errors';
+import { fetch } from '../../utils/fetch';
 import { learnMore } from '../../utils/link';
 
 const debug = require('debug')('expo:start:platforms:platformManager') as typeof console.log;
@@ -166,6 +168,48 @@ export class PlatformManager<
     };
   }
 
+  /**
+   * Check if the packager is ready by polling the /status endpoint.
+   * Expected response is `packager-status:running`.
+   */
+  protected async waitForPackagerAsync(): Promise<boolean> {
+    const devServerUrl = this.props.getDevServerUrl();
+    if (!devServerUrl) {
+      debug('Dev server URL not available, skipping packager status check');
+      return false;
+    }
+
+    const statusUrl = `${devServerUrl}/status`;
+    debug(`Checking packager status at: ${statusUrl}`);
+
+    const isPackagerReady = await waitForActionAsync({
+      action: async () => {
+        try {
+          const response = await fetch(statusUrl);
+          if (!response.ok) {
+            debug(`Packager status check failed with status: ${response.status}`);
+            return false;
+          }
+          const body = await response.text();
+          const isReady = body === 'packager-status:running';
+          debug(`Packager status response: ${body}, isReady: ${isReady}`);
+          return isReady;
+        } catch (error) {
+          debug(`Packager status check error: ${error}`);
+          return false;
+        }
+      },
+      interval: 100,
+      maxWaitTime: 10000,
+    });
+
+    if (!isPackagerReady) {
+      debug('Packager did not become ready within timeout');
+    }
+
+    return isPackagerReady;
+  }
+
   /** Launch the project on a device given the input runtime. */
   async openAsync(
     options:
@@ -182,6 +226,10 @@ export class PlatformManager<
       `open (runtime: ${options.runtime}, platform: ${this.props.platform}, device: %O, shouldPrompt: ${resolveSettings.shouldPrompt})`,
       resolveSettings.device
     );
+
+    // Wait for the packager to be ready before launching
+    await this.waitForPackagerAsync();
+
     if (options.runtime === 'expo') {
       return this.openProjectInExpoGoAsync(resolveSettings);
     } else if (options.runtime === 'web') {

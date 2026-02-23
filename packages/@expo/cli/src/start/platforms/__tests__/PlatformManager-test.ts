@@ -1,10 +1,19 @@
 import * as Log from '../../../log';
+import * as delay from '../../../utils/delay';
+import { fetch } from '../../../utils/fetch';
 import { DeviceManager } from '../DeviceManager';
 import { PlatformManager } from '../PlatformManager';
 
 // NOTE(Bacon): An extremely self contained system for testing the majority of the complex 'open in device' logic.
 jest.mock(`../../../log`);
 jest.mock('../ExpoGoInstaller');
+jest.mock('../../../utils/fetch', () => ({
+  fetch: jest.fn(),
+}));
+jest.mock('../../../utils/delay', () => ({
+  ...jest.requireActual('../../../utils/delay'),
+  waitForActionAsync: jest.fn(),
+}));
 jest.mock('@expo/config', () => ({
   getConfig: jest.fn(() => ({
     pkg: {},
@@ -16,10 +25,28 @@ jest.mock('@expo/config', () => ({
   })),
 }));
 
+const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
+const mockWaitForActionAsync = delay.waitForActionAsync as jest.MockedFunction<
+  typeof delay.waitForActionAsync
+>;
+
 const originalEnv = process.env;
 
 afterAll(() => {
   process.env = originalEnv;
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  // Default mock for fetch - packager is running
+  mockFetch.mockResolvedValue({
+    ok: true,
+    text: () => Promise.resolve('packager-status:running'),
+  } as Response);
+  // Default mock for waitForActionAsync - execute action once and return result
+  mockWaitForActionAsync.mockImplementation(async ({ action }) => {
+    return action();
+  });
 });
 
 describe('openAsync', () => {
@@ -326,5 +353,76 @@ describe('openAsync', () => {
     expect(device.logOpeningUrl).toHaveBeenNthCalledWith(1, url);
     expect(Log.warn).toHaveBeenCalledTimes(0);
     expect(Log.error).toHaveBeenCalledTimes(0);
+  });
+
+  it(`checks packager status before opening`, async () => {
+    const { manager, getDevServerUrl } = createManager();
+
+    await manager.openAsync({ runtime: 'expo' });
+
+    // Verify waitForActionAsync was called for packager status check
+    expect(mockWaitForActionAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interval: 100,
+        maxWaitTime: 10000,
+      })
+    );
+
+    // Verify fetch was called with the status endpoint
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:8081/status');
+    expect(getDevServerUrl).toHaveBeenCalled();
+  });
+
+  it(`proceeds to open even if packager status check fails`, async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve(''),
+    } as Response);
+
+    const { manager, device } = createManager();
+
+    // Should still open the project even if status check fails
+    await manager.openAsync({ runtime: 'expo' });
+
+    expect(device.openUrlAsync).toHaveBeenCalled();
+  });
+
+  it(`proceeds to open even if packager returns unexpected status`, async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('unexpected-status'),
+    } as Response);
+
+    const { manager, device } = createManager();
+
+    // Should still open the project even if status is unexpected
+    await manager.openAsync({ runtime: 'expo' });
+
+    expect(device.openUrlAsync).toHaveBeenCalled();
+  });
+
+  it(`proceeds to open even if fetch throws an error`, async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const { manager, device } = createManager();
+
+    // Should still open the project even if fetch fails
+    await manager.openAsync({ runtime: 'expo' });
+
+    expect(device.openUrlAsync).toHaveBeenCalled();
+  });
+
+  it(`skips packager status check when dev server URL is not available`, async () => {
+    const { manager, device } = createManager();
+    // Override getDevServerUrl to return null
+    manager['props'].getDevServerUrl = jest.fn(() => null);
+
+    await manager.openAsync({ runtime: 'expo' });
+
+    // Fetch should not be called since there's no dev server URL
+    expect(mockFetch).not.toHaveBeenCalled();
+    // But the app should still open
+    expect(device.openUrlAsync).toHaveBeenCalled();
   });
 });
