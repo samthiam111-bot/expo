@@ -8,7 +8,8 @@ import java.util.EnumSet
 // The class needs to be 'open', because it's inherited in expoview
 open class FilePermissionService : Service {
   enum class Permission {
-    READ, WRITE,
+    READ,
+    WRITE
   }
 
   open fun getPathPermissions(context: Context, path: String): EnumSet<Permission> =
