@@ -138,6 +138,7 @@ exceptions:
   - '.*macOS.*'
   - '.*manifest\.json.*'
   - '.*metro\.config\.js.*'
+  - '.*Maven.*'
   - '.*Netlify.*'
   - '.*Node\.js.*'
   - '.*Node Package Managers.*'
