@@ -1,0 +1,13 @@
+module hermes {
+  umbrella header "hermes/hermes.h"
+
+  export *
+  module * { export * }
+}
+
+module jsi {
+  umbrella header "jsi/jsi.h"
+
+  export *
+  module * { export * }
+}

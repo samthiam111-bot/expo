@@ -4,6 +4,7 @@
 
 #ifdef __cplusplus
 #import <ReactCommon/RCTHost.h>
+#import <jsi/jsi.h>
 #endif
 
 /**
@@ -21,4 +22,3 @@ NS_SWIFT_NAME(ExpoHostWrapper)
 - (nullable id)findModuleWithName:(nonnull NSString *)name lazilyLoadIfNecessary:(BOOL)lazilyLoadIfNecessary;
 
 @end
-
