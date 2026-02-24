@@ -33,7 +33,6 @@ Learn more from the [Set up environment guide](/get-started/set-up-your-environm
 
 ### Create a new Expo project
 
-
 Run the following command to create a new directory named **my-project** that contains your new Expo project. While you can name the project anything, this guide uses **my-project** for consistency.
 
 <Terminal cmd={['$ npx create-expo-app@latest my-project']} />
@@ -66,6 +65,7 @@ Navigate to your new Expo project and install the `expo-brownfield` library, whi
 
 The defaults are derived from your app config (for example, target names are based on your app's scheme or slug). You can also pass options to customize the target names, bundle identifiers, and publishing configuration.
 
+<Collapsible summary="Custom expo-brownfield configuration">
 ```json app.json
 {
   "expo": {
@@ -89,6 +89,7 @@ The defaults are derived from your app config (for example, target names are bas
   }
 }
 ```
+</Collapsible>
 
 See the [`expo-brownfield` API reference](/versions/latest/sdk/brownfield/) for details on all available options.
 
@@ -96,7 +97,7 @@ See the [`expo-brownfield` API reference](/versions/latest/sdk/brownfield/) for 
 
 ## Export your Expo project as a native library
 
-Once you have your Expo project set up, use the `expo-brownfield` CLI to build your React Native code as  AARs for Android and XCFrameworks for iOS.
+Once you have your Expo project set up, use the `expo-brownfield` CLI to build your React Native code as AARs for Android and XCFrameworks for iOS.
 
 <Tabs>
 <Tab label="Android">
@@ -150,7 +151,7 @@ With the artifacts built, you can now integrate them into your existing native a
 <Tab label="Android">
 
 <Step label="1">
-### Add the Maven dependency
+#### Add the Maven dependency
 
 Start by adding the dependency to your app's **build.gradle.kts**. The group, artifact name, and version should match your config plugin settings:
 
@@ -175,7 +176,7 @@ dependencyResolutionManagement {
 </Step>
 
 <Step label="2">
-### Show a React Native screen
+#### Show a React Native screen
 
 Create an activity that extends `BrownfieldActivity` and use the `showReactNativeFragment()` extension:
 
@@ -216,7 +217,7 @@ startActivity(Intent(this, ExpoActivity::class.java))
 <Tab label="iOS">
 
 <Step label="1">
-### Add XCFrameworks to your project
+#### Add XCFrameworks to your project
 
 Drag both XCFramework files (\{TargetName\}**.xcframework** and **hermesvm.xcframework**) into your Xcode project navigator. In the dialog that appears:
 
@@ -232,7 +233,7 @@ Then, in your target's **General** tab under **Frameworks, Libraries, and Embedd
 </Step>
 
 <Step label="2">
-### Initialize React Native
+#### Initialize React Native
 
 Call `ReactNativeHostManager.shared.initialize()` early in your app's lifecycle. A good place is your `AppDelegate`:
 
@@ -255,7 +256,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 </Step>
 
 <Step label="3">
-### Present a React Native view
+#### Present a React Native view
 
 <Tabs>
 <Tab label="UIKit">
