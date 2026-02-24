@@ -1,12 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.queryAllInspectorAppsAsync = queryAllInspectorAppsAsync;
-const node_fetch_1 = __importDefault(require("node-fetch"));
 async function queryAllInspectorAppsAsync(metroServerOrigin) {
-    const resp = await (0, node_fetch_1.default)(`${metroServerOrigin}/json/list`);
+    const resp = await fetch(`${metroServerOrigin}/json/list`);
     // The newest runtime will be at the end of the list,
     // reversing the result would save time from try-error.
     return (await resp.json()).reverse().filter(pageIsSupported);

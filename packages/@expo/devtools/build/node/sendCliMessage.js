@@ -11,12 +11,13 @@ const DEFAULT_TIMEOUT_MS = 5_000;
  * @param message Message to send to the WebSocket server.
  * @param pluginName Name of the plugin to send the message to. This is used to identify the plugin in the WebSocket server.
  * @param apps Apps to send the message to. This is an array of `MetroInspectorApp` objects.
+ * @param params Optional parameters to include in the message payload.
  * @param timeoutMs Timeout in milliseconds to wait for a response. Defaults to 10 seconds.
  */
-async function sendCliMessageAsync(message, pluginName, apps, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function sendCliMessageAsync(message, pluginName, apps, params, timeoutMs = DEFAULT_TIMEOUT_MS) {
     // Sanity check: ensure that all apps share the same WebSocket URL
     if (apps.length === 0) {
-        return Promise.reject(new CliExtensionUtils_js_1.SendMessageError('No apps provided to send the message to.', apps[0]));
+        return Promise.reject(new Error('No apps provided to send the message to.'));
     }
     // Check that all apps share the same broadcast URL
     if (apps.some((app) => new URL(app.webSocketDebuggerUrl).host !== new URL(apps[0].webSocketDebuggerUrl).host)) {
@@ -83,7 +84,7 @@ async function sendCliMessageAsync(message, pluginName, apps, timeoutMs = DEFAUL
         ws.addEventListener('open', () => {
             // On Open we'll send the message to the broadcast channel
             const messageKey = getMessageKey(pluginName, message);
-            ws.send(JSON.stringify({ messageKey, payload: { from: 'cli' } }));
+            ws.send(JSON.stringify({ messageKey, payload: { from: 'cli', ...params } }));
         });
         ws.addEventListener('error', () => {
             clearTimeout(timeoutHandler);
