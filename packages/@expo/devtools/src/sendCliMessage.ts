@@ -13,12 +13,14 @@ const DEFAULT_TIMEOUT_MS = 5_000;
  * @param message Message to send to the WebSocket server.
  * @param pluginName Name of the plugin to send the message to. This is used to identify the plugin in the WebSocket server.
  * @param apps Apps to send the message to. This is an array of `MetroInspectorApp` objects.
+ * @param params Optional parameters to include in the message payload.
  * @param timeoutMs Timeout in milliseconds to wait for a response. Defaults to 10 seconds.
  */
-export async function sendCliMessageAsync(
+export async function sendCliMessageAsync<Params extends Record<string, unknown>>(
   message: string,
   pluginName: string,
   apps: ExpoCliExtensionAppInfo[],
+  params?: Params,
   timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<Record<string, string | null>> {
   // Sanity check: ensure that all apps share the same WebSocket URL
@@ -117,7 +119,7 @@ export async function sendCliMessageAsync(
     ws.addEventListener('open', () => {
       // On Open we'll send the message to the broadcast channel
       const messageKey = getMessageKey(pluginName, message);
-      ws.send(JSON.stringify({ messageKey, payload: { from: 'cli' } }));
+      ws.send(JSON.stringify({ messageKey, payload: { from: 'cli', ...params } }));
     });
     ws.addEventListener('error', () => {
       clearTimeout(timeoutHandler);
