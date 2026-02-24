@@ -208,9 +208,13 @@ jobject NativeArrayBufferFrontendConverter::convert(
 ) const {
   JSIContext *jsiContext = getJSIContext(rt);
   auto object = value.asObject(rt);
-  auto arrayBuffer = isTypedArray(rt, object) ?
-    object.getProperty(rt, "buffer").asObject(rt).getArrayBuffer(rt) :
-    object.getArrayBuffer(rt);
+
+  if (isTypedArray(rt, object)) {
+    auto typedArray = TypedArray(rt, object);
+    return NativeArrayBuffer::newInstance(jsiContext, rt, typedArray).release();
+  }
+
+  auto arrayBuffer = object.getArrayBuffer(rt);
   return NativeArrayBuffer::newInstance(
     jsiContext,
     rt,
@@ -275,7 +279,7 @@ jobject JavaScriptArrayBufferFrontendConverter::convert(
   JSIContext *jsiContext = getJSIContext(rt);
   auto object = value.asObject(rt);
   auto arrayBuffer = isTypedArray(rt, object) ?
-    object.getProperty(rt, "buffer").asObject(rt).getArrayBuffer(rt) :
+    TypedArray(rt, object).getViewedBufferSlice(rt) :
     object.getArrayBuffer(rt);
   return JavaScriptArrayBuffer::newInstance(
     jsiContext,

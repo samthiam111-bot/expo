@@ -30,4 +30,6 @@ NS_SWIFT_NAME(JavaScriptTypedArray)
 
 - (nonnull EXJavaScriptArrayBuffer *)getBuffer;
 
+- (nonnull EXJavaScriptArrayBuffer *)getViewedBufferSlice;
+
 @end
