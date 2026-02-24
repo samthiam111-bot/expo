@@ -65,7 +65,7 @@ One of the differences between using environment variables with the Expo framewo
 - Local app config resolution, done by EAS CLI when preparing the app config
 - Remote jobs happening on EAS servers, which often don't have access to your local **.env** files that are git ignored
 
-Prior to SDK 55, `eas update` was an exception to this rule. By default, it used **.env** files present in your project directory to set environment variables for the update job, the same way [Expo CLI](/guides/environment-variables) does (it executes the `npx expo export` command under the hood). In **SDK 55 or later**, the `--environment` flag is required, and `eas update` uses only the environment variables set on EAS servers.
+In **SDK 54 and earlier**, `eas update` was an exception to this rule. By default, it used **.env** files present in your project directory to set environment variables for the update job, the same way [Expo CLI](/guides/environment-variables) does (it executes the `npx expo export` command under the hood). In **SDK 55 or later**, the `--environment` flag is required, and `eas update` uses only the environment variables set on EAS servers.
 
 For projects on SDK 54 or earlier, you can use the `--environment` flag with the `eas update` command to opt into this behavior.
 
