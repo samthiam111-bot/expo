@@ -5,7 +5,7 @@ description: URL paths reserved by Metro and Expo Router that you should avoid u
 
 import { FileTree } from '~/ui/components/FileTree';
 
-If you create a route or place static files at certain URL paths, Metro or Expo Router will intercept the request instead of serving your content. This typically results in a "404 Asset not found" error during development.
+If you create a route or place static files at certain URL paths, Metro or Expo Router will intercept the request instead of serving your content. Depending on the path, this can result in a "404 Asset not found" error or your page being silently replaced by an internal dev server response.
 
 ## `/assets/*`
 
@@ -45,6 +45,14 @@ React Native uses `/inspector/debug` and `/inspector/network` for the debugger. 
 ## `/expo-dev-plugins/*`
 
 Expo development tool plugins use this path. Do not create routes or static files under this path.
+
+## `/manifest`
+
+The dev server serves the native app manifest at this path. If you create a route at **app/manifest.tsx**, the dev server responds with manifest JSON instead of your page. Your route will appear to silently not load during development.
+
+## `/_sitemap`
+
+Expo Router automatically generates a sitemap route at this path for debugging. If you create a route at **app/\_sitemap.tsx**, it will override the built-in sitemap. See [Sitemap](/router/reference/sitemap/) for more details on this feature.
 
 ## `/public/*`
 
