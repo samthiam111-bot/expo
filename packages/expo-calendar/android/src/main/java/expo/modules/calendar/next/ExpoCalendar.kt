@@ -14,8 +14,12 @@ import expo.modules.calendar.next.exceptions.EventNotFoundException
 import expo.modules.calendar.next.exceptions.EventsCouldNotBeCreatedException
 import expo.modules.calendar.next.extensions.toCalendarRecord
 import expo.modules.calendar.next.extensions.toEventRecord
+import expo.modules.calendar.next.records.AlarmMethod
+import expo.modules.calendar.next.records.AttendeeType
+import expo.modules.calendar.next.records.CalendarAccessLevel
 import expo.modules.calendar.next.records.CalendarRecord
 import expo.modules.calendar.next.records.EventRecord
+import expo.modules.calendar.next.records.Source
 import expo.modules.calendar.next.utils.findEvents
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.exception.Exceptions
@@ -26,15 +30,45 @@ import java.util.TimeZone
 
 class ExpoCalendar(
   context: AppContext,
-  var calendarRecord: CalendarRecord? = CalendarRecord()
+  calendarRecord: CalendarRecord? = CalendarRecord()
 ) : SharedObject(context) {
+  var id: String? = calendarRecord?.id
+    private set
+  var title: String? = calendarRecord?.title
+    private set
+  var name: String? = calendarRecord?.name
+    private set
+  var source: Source? = calendarRecord?.source
+    private set
+  var color: Int? = calendarRecord?.color
+    private set
+  var isVisible: Boolean = calendarRecord?.isVisible ?: true
+    private set
+  var isSynced: Boolean = calendarRecord?.isSynced ?: true
+    private set
+  var timeZone: String? = calendarRecord?.timeZone
+    private set
+  var isPrimary: Boolean = calendarRecord?.isPrimary ?: true
+    private set
+  var allowsModifications: Boolean = calendarRecord?.allowsModifications ?: true
+    private set
+  var allowedAvailabilities: List<String> = calendarRecord?.allowedAvailabilities ?: listOf()
+    private set
+  var allowedReminders: List<AlarmMethod> = calendarRecord?.allowedReminders ?: listOf()
+    private set
+  var allowedAttendeeTypes: List<AttendeeType> = calendarRecord?.allowedAttendeeTypes ?: listOf()
+    private set
+  var ownerAccount: String? = calendarRecord?.ownerAccount
+    private set
+  var accessLevel: CalendarAccessLevel? = calendarRecord?.accessLevel
+    private set
 
   val reactContext: Context
     get() = appContext?.reactContext ?: throw Exceptions.ReactContextLost()
 
   suspend fun getEvents(startDate: String, endDate: String): List<ExpoCalendarEvent> {
     try {
-      if (calendarRecord?.id == null) {
+      if (id == null) {
         throw EventNotFoundException("Calendar id is null")
       }
       val contentResolver = reactContext.contentResolver
@@ -43,7 +77,7 @@ class ExpoCalendar(
         contentResolver,
         startDate,
         endDate,
-        listOf(calendarRecord?.id ?: "")
+        listOf(id ?: "")
       ).use { serializeExpoCalendarEvents(it) }
     } catch (e: Exception) {
       throw EventNotFoundException("Events could not be found", e)
@@ -52,25 +86,24 @@ class ExpoCalendar(
 
   suspend fun deleteCalendar(): Boolean {
     return withContext(Dispatchers.IO) {
-      val calendarID = calendarRecord?.id?.toIntOrNull()
+      val calendarID = id?.toLongOrNull()
         ?: throw EventNotFoundException("Calendar id is null")
-      val uri = ContentUris.withAppendedId(CalendarContract.Calendars.CONTENT_URI, calendarID.toLong())
+      val uri = ContentUris.withAppendedId(CalendarContract.Calendars.CONTENT_URI, calendarID)
       val contentResolver = reactContext.contentResolver
       val rows = contentResolver.delete(uri, null, null)
-      calendarRecord = null
-      rows > 0
+      update(CalendarRecord())
+      return@withContext rows > 0
     }
   }
 
-  suspend fun createEvent(record: EventRecord): ExpoCalendarEvent? {
+  suspend fun createEvent(record: EventRecord): ExpoCalendarEvent {
     try {
       val event = ExpoCalendarEvent(
         appContext
           ?: throw Exceptions.AppContextLost(),
         record
       )
-      val calendarId = calendarRecord?.id
-        ?: throw EventsCouldNotBeCreatedException("Calendar id is null")
+      val calendarId = id ?: throw EventsCouldNotBeCreatedException("Calendar id is null")
       val newEventId = event.saveEvent(record, calendarId)
       event.reloadEvent(newEventId.toString())
       return event
@@ -79,9 +112,26 @@ class ExpoCalendar(
     }
   }
 
+  fun update(record: CalendarRecord) {
+    id = record.id
+    title = record.title
+    name = record.name
+    source = record.source
+    color = record.color
+    isVisible = record.isVisible
+    isSynced = record.isSynced
+    timeZone = record.timeZone
+    isPrimary = record.isPrimary
+    allowsModifications = record.allowsModifications
+    allowedAvailabilities = record.allowedAvailabilities
+    allowedReminders = record.allowedReminders
+    allowedAttendeeTypes = record.allowedAttendeeTypes
+    ownerAccount = record.ownerAccount
+    accessLevel = record.accessLevel
+  }
+
   fun getUpdatedRecord(other: CalendarRecord, nullableFields: List<String>? = null): CalendarRecord {
     val nullableSet = nullableFields?.toSet() ?: emptySet()
-    val current = calendarRecord ?: CalendarRecord()
 
     fun <T> getValue(fieldName: String, otherValue: T?, currentValue: T): T =
       if (fieldName in nullableSet) currentValue else otherValue ?: currentValue
@@ -90,21 +140,21 @@ class ExpoCalendar(
       if (fieldName in nullableSet) null else otherValue ?: currentValue
 
     return CalendarRecord(
-      id = getNullableValue("id", other.id, current.id),
-      title = getNullableValue("title", other.title, current.title),
-      name = getNullableValue("name", other.name, current.name),
-      source = getNullableValue("source", other.source, current.source),
-      color = getNullableValue("color", other.color, current.color),
-      isVisible = getValue("isVisible", other.isVisible, current.isVisible),
-      isSynced = getValue("isSynced", other.isSynced, current.isSynced),
-      timeZone = getNullableValue("timeZone", other.timeZone, current.timeZone),
-      isPrimary = getValue("isPrimary", other.isPrimary, current.isPrimary),
-      allowsModifications = getValue("allowsModifications", other.allowsModifications, current.allowsModifications),
-      allowedAvailabilities = getValue("allowedAvailabilities", other.allowedAvailabilities, current.allowedAvailabilities),
-      allowedReminders = getValue("allowedReminders", other.allowedReminders, current.allowedReminders),
-      allowedAttendeeTypes = getValue("allowedAttendeeTypes", other.allowedAttendeeTypes, current.allowedAttendeeTypes),
-      ownerAccount = getNullableValue("ownerAccount", other.ownerAccount, current.ownerAccount),
-      accessLevel = getNullableValue("accessLevel", other.accessLevel, current.accessLevel)
+      id = getNullableValue("id", other.id, id),
+      title = getNullableValue("title", other.title, title),
+      name = getNullableValue("name", other.name, name),
+      source = getNullableValue("source", other.source, source),
+      color = getNullableValue("color", other.color, color),
+      isVisible = getValue("isVisible", other.isVisible, isVisible),
+      isSynced = getValue("isSynced", other.isSynced, isSynced),
+      timeZone = getNullableValue("timeZone", other.timeZone, timeZone),
+      isPrimary = getValue("isPrimary", other.isPrimary, isPrimary),
+      allowsModifications = getValue("allowsModifications", other.allowsModifications, allowsModifications),
+      allowedAvailabilities = getValue("allowedAvailabilities", other.allowedAvailabilities, allowedAvailabilities),
+      allowedReminders = getValue("allowedReminders", other.allowedReminders, allowedReminders),
+      allowedAttendeeTypes = getValue("allowedAttendeeTypes", other.allowedAttendeeTypes, allowedAttendeeTypes),
+      ownerAccount = getNullableValue("ownerAccount", other.ownerAccount, ownerAccount),
+      accessLevel = getNullableValue("accessLevel", other.accessLevel, accessLevel)
     )
   }
 

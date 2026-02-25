@@ -85,65 +85,65 @@ class CalendarNextModule : Module() {
       }
 
       Property("id") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.id
+        expoCalendar.id
       }
 
       Property("title") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.title
+        expoCalendar.title
       }
 
       Property("name") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.name
+        expoCalendar.name
       }
 
       Property("source") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.source
+        expoCalendar.source
       }
 
       Property("color") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.color?.let { colorInt ->
+        expoCalendar.color?.let { colorInt ->
           String.format("#%06X", 0xFFFFFF and colorInt)
         }
       }
 
       Property("isVisible") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.isVisible
+        expoCalendar.isVisible
       }
 
       Property("isSynced") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.isSynced
+        expoCalendar.isSynced
       }
 
       Property("timeZone") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.timeZone
+        expoCalendar.timeZone
       }
 
       Property("isPrimary") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.isPrimary
+        expoCalendar.isPrimary
       }
 
       Property("allowsModifications") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.allowsModifications
+        expoCalendar.allowsModifications
       }
 
       Property("allowedAvailabilities") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.allowedAvailabilities
+        expoCalendar.allowedAvailabilities
       }
 
       Property("allowedReminders") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.allowedReminders
+        expoCalendar.allowedReminders
       }
 
       Property("allowedAttendeeTypes") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.allowedAttendeeTypes
+        expoCalendar.allowedAttendeeTypes
       }
 
       Property("ownerAccount") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.ownerAccount
+        expoCalendar.ownerAccount
       }
 
       Property("accessLevel") { expoCalendar: ExpoCalendar ->
-        expoCalendar.calendarRecord?.accessLevel
+        expoCalendar.accessLevel
       }
 
       AsyncFunction("listEvents") Coroutine { expoCalendar: ExpoCalendar, startDate: String, endDate: String ->
@@ -160,7 +160,7 @@ class CalendarNextModule : Module() {
         permissionsDelegate.requireSystemPermissions(true)
         val updatedRecord = expoCalendar.getUpdatedRecord(details)
         ExpoCalendar.updateCalendar(appContext, updatedRecord, isNew = false)
-        expoCalendar.calendarRecord = updatedRecord
+        expoCalendar.update(updatedRecord)
       }
 
       AsyncFunction("delete") Coroutine { expoCalendar: ExpoCalendar ->
