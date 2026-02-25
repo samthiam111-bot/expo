@@ -11,8 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.RecomposeScope
 import androidx.compose.runtime.currentRecomposeScope
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.platform.ComposeView
@@ -74,12 +72,6 @@ abstract class ExpoComposeView<T : ComposeProps>(
     globalEvent.invoke(Pair(name, params))
   }
 
-  /**
-   * A Compose-observable version counter that triggers recomposition in [Children]
-   * whenever the ViewGroup's children are added or removed.
-   */
-  private val childrenVersion = mutableIntStateOf(0)
-
   @Composable
   abstract fun ComposableScope.Content()
 
@@ -115,11 +107,9 @@ abstract class ExpoComposeView<T : ComposeProps>(
     recomposeScope = currentRecomposeScope
     for (index in 0..<this.size) {
       val child = getChildAt(index) as? ExpoComposeView<*> ?: continue
-      key(child.id) {
-        with(composableScope ?: ComposableScope()) {
-          with(child) {
-            Content()
-          }
+      with(composableScope ?: ComposableScope()) {
+        with(child) {
+          Content()
         }
       }
     }
@@ -188,39 +178,11 @@ abstract class ExpoComposeView<T : ComposeProps>(
 
   override fun addView(child: View, index: Int, params: ViewGroup.LayoutParams) {
     val view = if (child !is ExpoComposeView<*> && child !is ComposeView && this !is RNHostViewInterface) {
-      ExpoComposeAndroidView(child, appContext).also {
-        // Transfer the React tag (view ID) so that React's SurfaceMountingManager
-        // can find the wrapper when removing children by tag.
-        it.id = child.id
-      }
+      ExpoComposeAndroidView(child, appContext)
     } else {
       child
     }
     super.addView(view, index, params)
-    childrenVersion.intValue++
-  }
-
-  override fun removeView(view: View) {
-    // If the view is directly in our children, remove it normally.
-    // Otherwise, it may have been wrapped in ExpoComposeAndroidView on addView —
-    // find the wrapper by matching the transferred ID and remove that instead.
-    if (indexOfChild(view) >= 0) {
-      super.removeView(view)
-    } else {
-      for (i in 0 until childCount) {
-        val child = getChildAt(i)
-        if (child is ExpoComposeAndroidView && child.id == view.id) {
-          super.removeViewAt(i)
-          break
-        }
-      }
-    }
-    childrenVersion.intValue++
-  }
-
-  override fun removeViewAt(index: Int) {
-    super.removeViewAt(index)
-    childrenVersion.intValue++
   }
 
   override fun onViewAdded(child: View?) {
