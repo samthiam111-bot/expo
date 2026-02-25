@@ -10,6 +10,20 @@
 
 ### 💡 Others
 
+## 55.0.8 — 2026-02-25
+
+_This version does not introduce any user-facing changes._
+
+## 55.0.7 — 2026-02-20
+
+_This version does not introduce any user-facing changes._
+
+## 55.0.6 — 2026-02-16
+
+### 🐛 Bug fixes
+
+- Key loader data by `contextKey` instead of URL pathname ([#43017](https://github.com/expo/expo/pull/43017) by [@hassankhan]
+
 ## 55.0.5 — 2026-02-03
 
 ### 💡 Others

@@ -5,6 +5,7 @@ description: Learn how to use the zoom transition to create fluid animations bet
 
 import { Collapsible } from '~/ui/components/Collapsible';
 import { ContentSpotlight } from '~/ui/components/ContentSpotlight';
+import { CODE } from '~/ui/components/Text';
 
 > **important** Zoom transition is an alpha API available on **iOS only** in **Expo SDK 55** and later. The API is subject to breaking changes.
 
@@ -309,6 +310,18 @@ We recommend avoiding the use of zoom transitions when navigating between screen
 
 </Collapsible>
 
+<Collapsible summary="Using zoom transition with Link.Preview">
+
+When using `Link.Preview` in combination with zoom transitions, the target screen must use the modal presentation, for example, `presentation: 'fullScreenModal'`. This is the limitation of the underlying iOS zoom transition API. When navigating to a non-modal screen from a `Link.Preview`, the zoom transition will not work as expected and will fall back to a standard navigation transition.
+
+</Collapsible>
+
+<Collapsible summary={<><CODE>usePreventZoomTransitionDismissal</CODE> cannot be used in screens with modal presentation</>}>
+
+The `usePreventZoomTransitionDismissal` hook cannot be used in screens that have a modal presentation, for example, `presentation: 'fullScreenModal'`. When used in a modal screen, the hook will not have any effect and dismissal gestures will function as normal.
+
+</Collapsible>
+
 <Collapsible summary="Single child requirement">
 
 Both `Link.AppleZoom` and `Link.AppleZoomTarget` only accept a single child component. If you attempt to pass multiple children, a warning will be logged and the component will not render properly.
@@ -332,6 +345,14 @@ Both `Link.AppleZoom` and `Link.AppleZoomTarget` only accept a single child comp
   </View>
 </Link.AppleZoom>
 ```
+
+</Collapsible>
+
+<Collapsible summary="Noticeable delay when opening or dismissing screens">
+
+You may experience a noticeable delay (approximately 1 second) when navigating to or dismissing screens that use zoom transitions, especially when performing rapid open/close/open gestures. This latency is higher than what you would see with native iOS apps using the same zoom transition API.
+
+This is an upstream issue in `react-native-screens` related to how it handles transitions on iOS. The Expo team is actively working with the `react-native-screens` team to improve this. See this [GitHub Issue](https://github.com/expo/expo/issues/42797) for updates and more details.
 
 </Collapsible>
 

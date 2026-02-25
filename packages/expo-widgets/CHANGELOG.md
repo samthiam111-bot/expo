@@ -8,9 +8,36 @@
 
 ### 🐛 Bug fixes
 
-- fix: blank widget preview content ([#42857](https://github.com/expo/expo/pull/42857) by [@garygcchiu](https://github.com/garygcchiu)
+- Fix "blinking" on interactions. ([#43416](https://github.com/expo/expo/pull/43416) by [@jakex7](https://github.com/jakex7))
+- Generate WidgetBundle for live activity even when there are no widgets. ([#43425](https://github.com/expo/expo/pull/43425) by [@jakex7](https://github.com/jakex7))
 
 ### 💡 Others
+
+## 55.0.0 — 2026-02-25
+
+### 🎉 New features
+
+- New API based on shared objects. ([#43243](https://github.com/expo/expo/pull/43243) by [@jakex7](https://github.com/jakex7))
+
+### 🐛 Bug fixes
+
+- Fix iOS bundle build for irregularly hoisted dependencies or monorepos ([#43350](https://github.com/expo/expo/pull/43350) by [@kitten](https://github.com/kitten))
+
+## 55.0.0-alpha.8 — 2026-02-20
+
+_This version does not introduce any user-facing changes._
+
+## 55.0.0-alpha.7 — 2026-02-16
+
+### 🎉 New features
+
+- Render widgets in JSC. ([#42987](https://github.com/expo/expo/pull/42987) by [@jakex7](https://github.com/jakex7))
+- Create widgets runtime bundle at build time. ([#43170](https://github.com/expo/expo/pull/43170) by [@jakex7](https://github.com/jakex7))
+
+### 🐛 Bug fixes
+
+- Fix blank widget preview content ([#42857](https://github.com/expo/expo/pull/42857) by [@garygcchiu](https://github.com/garygcchiu))
+- Fix duplicated warnings on start and prebuild. ([#43072](https://github.com/expo/expo/pull/43072) by [@jakex7](https://github.com/jakex7))
 
 ## 55.0.0-alpha.6 — 2026-02-08
 
