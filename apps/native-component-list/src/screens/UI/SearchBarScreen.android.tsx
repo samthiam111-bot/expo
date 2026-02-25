@@ -1,7 +1,13 @@
-import { SearchBar, Host } from '@expo/ui/jetpack-compose';
-import { offset } from '@expo/ui/jetpack-compose/modifiers';
+import {
+  AppBarWithSearch,
+  type AppBarWithSearchRef,
+  Host,
+  IconButton,
+  Scaffold,
+} from '@expo/ui/jetpack-compose';
+import { useNavigation } from '@react-navigation/native';
 import * as React from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 const ITEMS = [
   { name: 'Apple', subtitle: 'Sweet and crispy', id: 1 },
@@ -25,6 +31,8 @@ const ITEMS = [
 ];
 
 export default function SearchBarScreen() {
+  const navigation = useNavigation();
+  const searchRef = React.useRef<AppBarWithSearchRef>(null);
   const [query, setQuery] = React.useState('');
 
   const filteredItems = React.useMemo(() => {
@@ -34,52 +42,62 @@ export default function SearchBarScreen() {
   }, [query]);
 
   return (
-    <View style={styles.container}>
-      <Host style={styles.host}>
-        <SearchBar
-          defaultValue=""
-          placeholder="Search fruits..."
-          onChangeText={setQuery}
-          onExpandedChange={(expanded) => {
-            console.log(`SearchBar ${expanded ? 'expanded' : 'collapsed'}`);
-          }}>
-          <ScrollView>
-            {filteredItems.map((item) => (
-              <View key={item.name} style={styles.item}>
-                <Image
-                  source={{ uri: `https://picsum.photos/seed/${item.id}/100/100` }}
-                  style={styles.avatar}
-                />
-                <View style={styles.textContainer}>
-                  <Text style={styles.itemText}>{item.name}</Text>
-                  <Text style={styles.subtitle}>{item.subtitle}</Text>
+    <Host style={styles.host}>
+      <Scaffold
+        topBar={
+          <AppBarWithSearch
+            ref={searchRef}
+            title="Fruit Search"
+            placeholder="Search fruits..."
+            defaultValue=""
+            onChangeText={setQuery}
+            navigationIcon={
+              <IconButton systemImage="filled.ArrowBack" onPress={() => navigation.goBack()} />
+            }
+            trailingIcon={
+              <IconButton
+                systemImage="filled.MoreVert"
+                onPress={() => console.log('More options')}
+              />
+            }>
+            <ScrollView>
+              {filteredItems.map((item) => (
+                <Pressable
+                  key={item.name}
+                  style={styles.item}
+                  onPress={() => {
+                    console.log(item.name);
+                    searchRef.current?.collapse();
+                  }}>
+                  <Image
+                    source={{ uri: `https://picsum.photos/seed/${item.id}/100/100` }}
+                    style={styles.avatar}
+                  />
+                  <View style={styles.textContainer}>
+                    <Text style={styles.itemText}>{item.name}</Text>
+                    <Text style={styles.subtitle}>{item.subtitle}</Text>
+                  </View>
+                </Pressable>
+              ))}
+              {filteredItems.length === 0 && (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>No results found</Text>
                 </View>
-              </View>
-            ))}
-            {filteredItems.length === 0 && (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>No results found</Text>
-              </View>
-            )}
-          </ScrollView>
-        </SearchBar>
-      </Host>
-    </View>
+              )}
+            </ScrollView>
+          </AppBarWithSearch>
+        }>
+        <View style={styles.content}>
+          <Text style={styles.contentText}>Tap the search bar to find fruits</Text>
+        </View>
+      </Scaffold>
+    </Host>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   host: {
     flex: 1,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1,
   },
   item: {
     flexDirection: 'row',
@@ -113,6 +131,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
+    fontSize: 16,
+    color: '#888',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contentText: {
     fontSize: 16,
     color: '#888',
   },
