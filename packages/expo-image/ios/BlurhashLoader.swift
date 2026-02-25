@@ -1,4 +1,4 @@
-import SDWebImage
+@_implementationOnly import SDWebImage
 import ExpoModulesCore
 
 class BlurhashLoader: NSObject, SDImageLoader {

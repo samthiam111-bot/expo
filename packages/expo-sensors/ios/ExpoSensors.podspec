@@ -20,12 +20,14 @@ Pod::Spec.new do |s|
 
   s.dependency 'ExpoModulesCore'
 
-  s.source_files = "**/*.{h,m,swift}"
-
-  if podfile_properties['MOTION_PERMISSION'] == 'false'
-    s.pod_target_xcconfig = {
-      'OTHER_SWIFT_FLAGS' => '$(inherited) -DEXPO_DISABLE_MOTION_PERMISSION',
-      'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) EXPO_DISABLE_MOTION_PERMISSION=1',
-    }
+  if (!Expo::PackagesConfig.instance.try_link_with_prebuilt_xcframework(s))
+    s.static_framework = true
+    s.source_files = "**/*.{h,m,swift}"
+    if podfile_properties['MOTION_PERMISSION'] == 'false'
+      s.pod_target_xcconfig = {
+        'OTHER_SWIFT_FLAGS' => '$(inherited) -DEXPO_DISABLE_MOTION_PERMISSION',
+        'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) EXPO_DISABLE_MOTION_PERMISSION=1',
+      }
+  end
   end
 end

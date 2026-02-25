@@ -296,44 +296,34 @@ function pushUnsafeFlags(
 /** Artifact paths for dependency resolution (DownloadedDependencies minus the buildFlavor field) */
 type ArtifactPaths = Omit<DownloadedDependencies, 'buildFlavor'>;
 
+/**
+ * Generates Package.swift content from SPM configuration.
+ * This produces a flat Package.swift without helper classes.
+ */
+async function generatePackageSwiftAsync(
+  pkg: SPMPackageSource,
+  product: SPMProduct,
+  buildType: BuildFlavor,
+  packageSwiftPath: string,
+  targetSourceCodePath: string,
+  artifactPaths?: ArtifactPaths
+): Promise<string> {
+  const context = await buildPackageSwiftContext(
+    pkg,
+    product,
+    buildType,
+    packageSwiftPath,
+    targetSourceCodePath,
+    artifactPaths
+  );
+  return generatePackageSwiftContent(context);
+}
+
 // Main Export: SPMPackage
 
 export const SPMPackage = {
   /**
-   * Generates Package.swift content from SPM configuration.
-   * This produces a flat Package.swift without helper classes.
-   *
-   * @param pkg The package to generate for
-   * @param product The product to generate for
-   * @param buildType Debug or Release build flavor
-   * @param packageSwiftPath Path to write the Package.swift file
-   * @param targetSourceCodePath Path to the target source code folder
-   * @param artifactPaths Optional artifact paths from centralized cache
-   * @returns The Package.swift content as a string
-   */
-  async generatePackageSwiftAsync(
-    pkg: SPMPackageSource,
-    product: SPMProduct,
-    buildType: BuildFlavor,
-    packageSwiftPath: string,
-    targetSourceCodePath: string,
-    artifactPaths?: ArtifactPaths
-  ): Promise<string> {
-    // Build context for Package.swift generation
-    const context = await buildPackageSwiftContext(
-      pkg,
-      product,
-      buildType,
-      packageSwiftPath,
-      targetSourceCodePath,
-      artifactPaths
-    );
-    return generatePackageSwiftContent(context);
-  },
-
-  /**
    * Writes a Package.swift file to a specified path.
-   * Useful for comparison purposes.
    *
    * @param pkg The package to generate for
    * @param product The product to generate for
@@ -350,7 +340,7 @@ export const SPMPackage = {
     targetSourceCodePath: string,
     artifactPaths?: ArtifactPaths
   ): Promise<void> {
-    const content = await SPMPackage.generatePackageSwiftAsync(
+    const content = await generatePackageSwiftAsync(
       pkg,
       product,
       buildType,
@@ -368,16 +358,6 @@ export const SPMPackage = {
       }
     }
     await fs.writeFile(packageSwiftPath, content, 'utf-8');
-  },
-
-  /**
-   * Returns a path for the new-style Package.swift for comparison purposes.
-   *
-   * @param pkg The package
-   * @returns Path to Package.new.swift
-   */
-  getComparisonPackageSwiftPath(pkg: SPMPackageSource): string {
-    return path.join(pkg.path, 'Package.new.swift');
   },
 };
 
@@ -703,7 +683,8 @@ async function resolveSourceTarget(
       externalDeps,
       artifactPaths || null,
       packageSwiftDir,
-      buildType
+      buildType,
+      target
     );
   } else if (target.type === 'objc' || target.type === 'cpp') {
     const { cSettings, cxxSettings } = buildCSettings(
@@ -730,7 +711,7 @@ async function resolveSourceTarget(
     }
   }
 
-  // Linker settings for linked frameworks
+  // Linker settings for linked frameworks and libraries
   if (resolved.linkedFrameworks.length > 0) {
     resolved.linkerSettings = resolved.linkedFrameworks.map((fw) => `.linkedFramework("${fw}")`);
   }
@@ -779,7 +760,8 @@ function buildSwiftSettings(
   externalDeps: string[],
   artifactPaths: ArtifactPaths | null,
   packageSwiftDir: string,
-  buildType: BuildFlavor
+  buildType: BuildFlavor,
+  target?: SwiftTarget
 ): string[] {
   const settings: string[] = [];
 
@@ -816,6 +798,21 @@ function buildSwiftSettings(
     release.flatMap((f) => ['-Xcc', f]),
     'release'
   );
+
+  // Process compilerFlags for Swift targets. These are passed as -Xcc flags
+  // to Clang when the Swift compiler processes C module imports.
+  // This is necessary for C targets with #ifdef-guarded APIs (e.g., SQLITE_ENABLE_SESSION)
+  // where the defines must be visible during Swift's module import, not just C compilation.
+  if (target?.compilerFlags) {
+    const resolvedFlags = resolveCompilerFlags(target.compilerFlags, buildType);
+    const xccFlags: string[] = [];
+    for (const flag of resolvedFlags.c) {
+      xccFlags.push('-Xcc', flag);
+    }
+    if (xccFlags.length > 0) {
+      pushUnsafeFlags([settings], xccFlags);
+    }
+  }
 
   return settings;
 }
@@ -903,11 +900,8 @@ function buildCSettings(
   cSettings.push('.unsafeFlags(["-fmodules"])');
   cxxSettings.push('.unsafeFlags(["-fmodules"])');
 
-  // Enable C++ interop for Objective-C targets (matches template line 701)
-  // This allows .m files to use C++ headers from React Native
-  if (target.type === 'objc') {
-    cSettings.push('.unsafeFlags(["-x", "objective-c++"])');
-  }
+  // Do NOT add `-x objective-c++` — it causes C++ name mangling on plain C functions,
+  // breaking symbol resolution from Swift. SPM handles .mm → ObjC++ natively.
 
   // Add target-specific include directories (relative to target path in the package root)
   // These are used for targets that need to include headers from other locations (e.g., codegen)
@@ -993,14 +987,39 @@ function buildCSettings(
     // Substitute variables like ${REACT_NATIVE_MINOR_VERSION} in compiler flags
     const cFlags = substituteCompilerFlagVariables(resolvedFlags.c, pkgPath);
     const cxxFlags = substituteCompilerFlagVariables(resolvedFlags.cxx, pkgPath);
-    if (cFlags.length > 0) {
-      const flagString = `[${cFlags.map((f) => `"${escapeSwiftString(f)}"`).join(', ')}]`;
-      cSettings.push(`.unsafeFlags(${flagString})`);
-    }
-    if (cxxFlags.length > 0) {
-      const flagString = `[${cxxFlags.map((f) => `"${escapeSwiftString(f)}"`).join(', ')}]`;
-      cxxSettings.push(`.unsafeFlags(${flagString})`);
-    }
+
+    // Separate -D flags into .define() settings and keep the rest as .unsafeFlags().
+    // .define() is propagated by SPM to dependent targets when they import this module,
+    // while .unsafeFlags() only applies during source compilation. This is critical for
+    // headers with #ifdef guards (e.g., SQLITE_ENABLE_SESSION) — without .define(),
+    // Swift targets importing this C module won't see the conditionally-compiled symbols.
+    const addDefinesAndFlags = (flags: string[], settings: string[]) => {
+      const defines: string[] = [];
+      const otherFlags: string[] = [];
+      for (const flag of flags) {
+        const defineMatch = flag.match(/^-D(\w+)(?:=(.+))?$/);
+        if (defineMatch) {
+          const name = defineMatch[1];
+          const value = defineMatch[2];
+          if (value !== undefined) {
+            settings.push(
+              `.define("${escapeSwiftString(name)}", to: "${escapeSwiftString(value)}")`
+            );
+          } else {
+            settings.push(`.define("${escapeSwiftString(name)}")`);
+          }
+        } else {
+          otherFlags.push(flag);
+        }
+      }
+      if (otherFlags.length > 0) {
+        const flagString = `[${otherFlags.map((f) => `"${escapeSwiftString(f)}"`).join(', ')}]`;
+        settings.push(`.unsafeFlags(${flagString})`);
+      }
+    };
+
+    addDefinesAndFlags(cFlags, cSettings);
+    addDefinesAndFlags(cxxFlags, cxxSettings);
   }
 
   // Add VFS overlays and header maps for React if present
@@ -1099,22 +1118,26 @@ function collectVfsAndHeaderMapFlags(
           // Debug VFS overlay
           if (config.debugBasePath) {
             const debugVfsAbsPath = path.join(config.debugBasePath, vfsFile);
-            debug.push('-ivfsoverlay', debugVfsAbsPath);
+            if (fs.existsSync(debugVfsAbsPath)) {
+              debug.push('-ivfsoverlay', debugVfsAbsPath);
 
-            const vfsRootPath = extractVFSOverlayRootPath(debugVfsAbsPath);
-            if (vfsRootPath) {
-              debug.push('-I', vfsRootPath);
+              const vfsRootPath = extractVFSOverlayRootPath(debugVfsAbsPath);
+              if (vfsRootPath) {
+                debug.push('-I', vfsRootPath);
+              }
             }
           }
 
           // Release VFS overlay
           if (config.releaseBasePath) {
             const releaseVfsAbsPath = path.join(config.releaseBasePath, vfsFile);
-            release.push('-ivfsoverlay', releaseVfsAbsPath);
+            if (fs.existsSync(releaseVfsAbsPath)) {
+              release.push('-ivfsoverlay', releaseVfsAbsPath);
 
-            const vfsRootPath = extractVFSOverlayRootPath(releaseVfsAbsPath);
-            if (vfsRootPath) {
-              release.push('-I', vfsRootPath);
+              const vfsRootPath = extractVFSOverlayRootPath(releaseVfsAbsPath);
+              if (vfsRootPath) {
+                release.push('-I', vfsRootPath);
+              }
             }
           }
         }
@@ -1183,13 +1206,11 @@ async function buildPackageSwiftContext(
   // Add external dependencies as binary targets
   const externalDeps = product.externalDependencies || [];
   for (const depName of externalDeps) {
-    const normalizedName = depName.charAt(0).toLowerCase() + depName.slice(1);
-
     spinner.info(`Resolving external dependency: ${depName}`);
 
     // Check if it's a known React Native ecosystem dependency
     const externalConfig = getExternalDependencyConfig(
-      normalizedName,
+      depName,
       artifactPaths || null,
       packageSwiftDir,
       buildType
@@ -1208,11 +1229,13 @@ async function buildPackageSwiftContext(
       continue;
     }
 
-    // Check if it's an expo package dependency (format: package/product)
+    // Check if it's an expo package dependency (format: package/product or @scope/package/product)
     if (depName.includes('/')) {
       const parts = depName.split('/');
-      const packageName = parts[0];
-      const productName = parts[1];
+      // Scoped packages start with @ (e.g., @expo/ui/ExpoUI → package=@expo/ui, product=ExpoUI)
+      const isScoped = parts[0].startsWith('@');
+      const packageName = isScoped ? `${parts[0]}/${parts[1]}` : parts[0];
+      const productName = isScoped ? parts[2] : parts[1];
 
       // XCFrameworks are in the centralized build directory
       const depBuildPath = path.join(getPrecompileDir(), '.build', packageName);

@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { execSync } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
 
@@ -32,8 +33,13 @@ export const SPMBuild = {
 
     // Verify that we have a Package.swift file in the package directory
     const packageSwiftPath = SPMGenerator.getSwiftPackagePath(pkg, product);
-    if (!(await fs.existsSync(packageSwiftPath))) {
+    if (!fs.existsSync(packageSwiftPath)) {
       throw new Error(`No Package.swift file found in package: ${pkg.packageName}`);
+    }
+
+    // Resolve SPM dependencies and apply patches to known problematic packages
+    if (product.spmPackages && product.spmPackages.length > 0) {
+      resolveSPMDependenciesAndPatch(path.dirname(packageSwiftPath));
     }
 
     // Collect all build platforms, filtering if a specific platform is requested
@@ -304,6 +310,60 @@ const buildForPlatformAsync = async (
     );
   }
 };
+
+/**
+ * Resolves SPM package dependencies (swift package resolve) and applies
+ * source patches to known problematic packages that break under
+ * BUILD_LIBRARY_FOR_DISTRIBUTION=YES (library evolution).
+ */
+function resolveSPMDependenciesAndPatch(packageDir: string): void {
+  // Resolve SPM dependencies first
+  logger.info('📦 Resolving SPM package dependencies...');
+  execSync('swift package resolve', { cwd: packageDir, stdio: 'pipe' });
+
+  // Patch Reachability.swift: module/class name collision breaks .swiftinterface generation.
+  // The typealiases `(Reachability) -> ()` expand to `(Reachability.Reachability) -> ()`
+  // in the module interface, which is ambiguous. We rewrite them using Void return syntax.
+  const reachabilitySource = path.join(
+    packageDir,
+    '.build',
+    'checkouts',
+    'Reachability.swift',
+    'Sources',
+    'Reachability',
+    'Reachability.swift'
+  );
+
+  if (fs.existsSync(reachabilitySource)) {
+    let content = fs.readFileSync(reachabilitySource, 'utf8');
+
+    // Fix library evolution .swiftinterface issue: the module and class are both
+    // named "Reachability", so the compiler emits `Reachability.Reachability` in
+    // the interface which is ambiguous inside the class body. We add a module-level
+    // typealias and rewrite the class typealiases to reference it instead.
+    if (
+      content.includes('public typealias NetworkReachable = (Reachability) -> ()') &&
+      !content.includes('public typealias _ReachabilityRef')
+    ) {
+      // Add module-level typealias before the class definition
+      content = content.replace(
+        /^(public class Reachability)/m,
+        'public typealias _ReachabilityRef = Reachability\n\n$1'
+      );
+      // Rewrite the class-level typealiases to use the module-level alias
+      content = content.replace(
+        'public typealias NetworkReachable = (Reachability) -> ()',
+        'public typealias NetworkReachable = (_ReachabilityRef) -> ()'
+      );
+      content = content.replace(
+        'public typealias NetworkUnreachable = (Reachability) -> ()',
+        'public typealias NetworkUnreachable = (_ReachabilityRef) -> ()'
+      );
+      fs.writeFileSync(reachabilitySource, content, 'utf8');
+      logger.info('🩹 Patched Reachability.swift (library evolution typealias fix)');
+    }
+  }
+}
 
 /**
  * Maps a ProductPlatform to an array of BuildPlatforms

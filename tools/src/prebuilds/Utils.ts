@@ -38,6 +38,29 @@ export const discoverAllSPMPackagesAsync = async (): Promise<SPMPackageSource[]>
 };
 
 /**
+ * Builds a map from CocoaPods pod name to SPM dependency string
+ * (e.g., "UMAppLoader" -> "unimodules-app-loader/UMAppLoader").
+ *
+ * Scans all monorepo and external packages that have spm.config.json
+ * and maps each product's `podName` to "packageName/productName".
+ */
+export const buildPodNameMapAsync = async (): Promise<Map<string, string>> => {
+  const podMap = new Map<string, string>();
+  const allPackages = await discoverAllSPMPackagesAsync();
+
+  for (const pkg of allPackages) {
+    const config = pkg.getSwiftPMConfiguration();
+    for (const product of config.products) {
+      if (product.podName) {
+        podMap.set(product.podName, `${pkg.packageName}/${product.name}`);
+      }
+    }
+  }
+
+  return podMap;
+};
+
+/**
  * Validation error for podName mismatch
  */
 export interface PodNameValidationError {
@@ -155,42 +178,6 @@ export const validateAllPodNamesAsync = async (
   }
 
   return allErrors;
-};
-
-/**
- * Verifies that all requested packages exist and have spm-config.json files.
- * If no package names are provided, discovers all packages with spm.config.json.
- * @param packageNames Names of packages to verify (if empty, discovers all SPM packages)
- * @returns Parsed Packages that were verified
- */
-export const verifyPackagesAsync = async (packageNames: string[]): Promise<Package[]> => {
-  // If no package names provided, discover all packages with spm.config.json
-  if (packageNames.length === 0) {
-    const packages = await discoverPackagesWithSPMConfigAsync();
-    if (packages.length === 0) {
-      throw new Error('No packages with spm.config.json found in the packages directory.');
-    }
-    logger.info(
-      `Discovered ${chalk.cyan(packages.length)} packages with spm.config.json: ${chalk.green(packages.map((p) => p.packageName).join(', '))}`
-    );
-    return packages;
-  }
-
-  return Promise.all(
-    packageNames.map(async (name) => {
-      // Does it have a folder in packages/?
-      const pkg = getPackageByName(name);
-      if (!pkg) {
-        throw new Error(`Package not found: ${chalk.red(name)}`);
-      }
-      // Does it have a prebuild.config.json file?
-      if (!pkg.hasSwiftPMConfiguration()) {
-        throw new Error(`Package ${chalk.gray(name)} does not have a spm.config.json file.`);
-      }
-
-      return pkg;
-    })
-  );
 };
 
 /**

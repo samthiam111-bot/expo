@@ -1,5 +1,5 @@
 import ExpoModulesCore
-import SDWebImage
+@_implementationOnly import SDWebImage
 
 enum ImagePriority: String, Enumerable {
   case low

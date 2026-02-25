@@ -21,16 +21,16 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
   s.dependency 'React-Core'
 
-  s.resource_bundles = {'ExpoMediaLibrary_privacy' => ['PrivacyInfo.xcprivacy']}
-
   # Swift/Objective-C compatibility
-  s.pod_target_xcconfig = {
-    'DEFINES_MODULE' => 'YES'
-  }
-
-  s.source_files = "**/*.{h,m,swift}"
-
-  s.exclude_files = 'Tests/'
+  if (!Expo::PackagesConfig.instance.try_link_with_prebuilt_xcframework(s))
+    s.static_framework = true
+    s.pod_target_xcconfig = {
+      'DEFINES_MODULE' => 'YES'
+    }
+    s.source_files = "**/*.{h,m,swift}"
+    s.resource_bundles = {'ExpoMediaLibrary_privacy' => ['PrivacyInfo.xcprivacy']}
+    s.exclude_files = 'Tests/'
+  end
   s.test_spec 'Tests' do |test_spec|
     test_spec.dependency 'ExpoModulesTestCore'
 

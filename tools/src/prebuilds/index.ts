@@ -14,7 +14,6 @@ export {
   validatePodNamesAsync,
   verifyAllPackagesAsync,
   verifyLocalTarballPathsIfSetAsync,
-  verifyPackagesAsync,
   type PodNameValidationError,
 } from './Utils';
 export {

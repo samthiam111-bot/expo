@@ -1,6 +1,6 @@
 import Photos
 import Dispatch
-import SDWebImage
+@_implementationOnly import SDWebImage
 import ExpoModulesCore
 
 /**

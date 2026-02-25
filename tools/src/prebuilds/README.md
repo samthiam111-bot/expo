@@ -1,396 +1,191 @@
-# Expo Prebuilds System
+# Expo Prebuilds
 
-The Expo Prebuilds System is a toolchain for building iOS XCFrameworks from Expo modules using Swift Package Manager (SPM). It automates the process of generating `Package.swift` files, downloading dependencies, building frameworks for multiple platforms, composing universal XCFrameworks, and verifying the resulting binaries.
+This folder contains the iOS prebuild toolchain used by `et prebuild`.
 
-## Overview
+The toolchain builds XCFramework artifacts from `spm.config.json` definitions, with optional verification and signing.
 
-The prebuild system compiles Expo modules into prebuilt binary frameworks (XCFrameworks), which can speed up build times and simplify dependency management. The system supports:
+## Audience And Goals
 
-- Building for multiple platforms (iOS, iOS Simulator, macOS, tvOS, Mac Catalyst, visionOS)
-- Both Debug and Release configurations
-- Automatic dependency resolution (Hermes, React Native, React Native Dependencies)
-- Downloading artifacts from Maven repositories or using local tarballs
-- Source code structure generation with symlinks (preserves original file locations)
-- Module map and umbrella header generation
-- Multi-product support: Split a single codebase into multiple products (e.g., ExpoModulesCore and ExpoModulesJSI)
-- XCFramework verification: Validates built frameworks for correctness
+This README is written for:
 
-## Architecture
+- Humans: to understand the system quickly and troubleshoot confidently.
+- LLMs/automation: to follow stable sectioning, glossary terms, and explicit invariants.
 
-### Core Components
+## Quick Start
 
-| File                  | Description                                                          |
-| --------------------- | -------------------------------------------------------------------- |
-| `index.ts`            | Public exports for the Prebuilder pipeline                           |
-| `SPMPackage.ts`       | **Generates clean, flat Package.swift files from SPM configuration** |
-| `SPMGenerator.ts`     | Generates source code structure with symlinks for SPM builds         |
-| `SPMBuild.ts`         | Builds Swift packages using `xcodebuild`                             |
-| `SPMVerify.ts`        | **Verifies XCFramework correctness (headers, modules, binaries)**    |
-| `Artifacts.ts`        | Downloads prebuilt artifacts from Maven or nightly builds            |
-| `Artifacts.types.ts`  | Type definitions for artifact configuration                          |
-| `Dependencies.ts`     | Manages downloading and copying of build dependencies                |
-| `Frameworks.ts`       | Composes XCFrameworks from built framework slices                    |
-| `XCodeRunner.ts`      | Wrapper for running `xcodebuild` with formatted output               |
-| `Utils.ts`            | Utility functions for version resolution and validation              |
-| `Prebuilder.types.ts` | Shared type definitions (BuildFlavor, etc.)                          |
-| `SPMConfig.types.ts`  | Type definitions for SPM configuration                               |
-| `SPMBuild.types.ts`   | Type definitions for build artifacts                                 |
-| `SPMPackage.types.ts` | Type definitions for Package.swift generation                        |
-| `SPMVerify.types.ts`  | Type definitions for verification reports                            |
+Run prebuild for one package:
 
-## Configuration
-
-Each Expo module that supports prebuilding must have an `spm.config.json` file in its package directory. This file defines the SPM structure for the module.
-
-See `prebuilds/schemas/spm.config.schema.json` for the full JSON schema.
-
-### Supported Platforms
-
-- \`iOS(.v15)\` - iOS 15+
-- \`iOS(.v15_1)\` - iOS 15.1+
-- \`macOS(.v11)\` - macOS 11+
-- \`tvOS(.v15)\` - tvOS 15+
-- \`tvOS(.v15_1)\` - tvOS 15.1+
-- \`macCatalyst(.v15)\` - Mac Catalyst 15+
-
-### Target Types
-
-The system supports four target types:
-
-1. **\`objc\`** - Objective-C source targets (\`.m\`, \`.mm\`, \`.c\`, \`.cpp\` files)
-2. **\`swift\`** - Swift source targets (\`.swift\` files)
-3. **\`cpp\`** - C++ source targets (\`.cpp\`, \`.c\`, \`.cc\`, \`.cxx\` files)
-4. **\`framework\`** - Pre-built binary XCFramework targets
-
-### Target Options
-
-Common options available for all source targets (`objc`, `swift`, `cpp`):
-
-| Option               | Description                                                    |
-| -------------------- | -------------------------------------------------------------- |
-| `name`               | Target name (required)                                         |
-| `moduleName`         | Module name for header organization (defaults to product name) |
-| `path`               | Path to source files relative to package root (required)       |
-| `pattern`            | Glob pattern to filter source files within the path            |
-| `headerPattern`      | Glob pattern to filter header files within the path            |
-| `dependencies`       | Names of other targets this target depends on                  |
-| `exclude`            | Glob patterns for files to exclude from compilation            |
-| `includeDirectories` | Header search paths relative to the target path                |
-| `linkedFrameworks`   | System frameworks to link (e.g., `Foundation`, `UIKit`)        |
-
-Framework targets support:
-
-- \`vfsOverlayPath\` - Path to a VFS overlay file (\`.yaml\`)
-
-### External Dependencies
-
-Packages can depend on these external dependencies:
-
-- \`Hermes\` - The Hermes JavaScript engine (hermesvm.xcframework)
-- \`ReactNativeDependencies\` - React Native core dependencies
-- \`React\` - React Native framework (with header map and VFS overlay support)
-
-## Build Pipeline
-
-The prebuild process consists of five stages that can be run individually or together:
-
-### 1. Artifact Download (\`--artifacts\`)
-
-Downloads required dependencies from Maven repositories or uses local tarballs:
-
-- Hermes XCFramework
-- React Native Dependencies XCFramework
-- React XCFramework
-
-Artifacts are cached by version in a shared folder, so subsequent builds reuse downloaded dependencies. Debug and Release artifacts are stored separately in flavor-specific subfolders.
-
-### 2. Package.swift Generation (\`--generate\`)
-
-Generates the SPM build structure from \`spm.config.json\`:
-
-- Creates a temporary source folder structure in `packages/precompile/.build/<package-name>/generated/<ProductName>/`
-- Generates a clean, flat \`Package.swift\` without helper classes
-- Resolves external dependencies to their XCFramework paths
-
-**Why symlinks?** Swift Package Manager requires a specific directory layout where source files are organized by target. Rather than copying source files (which would duplicate them and break IDE navigation), the system creates symlinks from the SPM-required structure back to the original source locations. This allows:
-
-- Building with SPM without reorganizing the existing codebase
-- Keeping source files in their original locations for editing
-- IDE features (go-to-definition, etc.) continue to work normally
-- Header files are copied (not symlinked) since they need to be bundled in the final XCFramework
-
-### 3. Build (\`--build\`)
-
-Builds the Swift package for each platform using \`xcodebuild\`:
-
-- Builds for all platforms defined in \`spm.config.json\`
-- Produces \`.framework\` files for each platform slice
-- Generates dSYM debug symbol bundles
-- Uses C++20 language standard
-
-### 4. XCFramework Composition (\`--compose\`)
-
-Combines platform-specific frameworks into universal XCFrameworks:
-
-- Merges framework slices using \`xcodebuild -create-xcframework\`
-- Collects and flattens header files into each slice
-- Generates module maps and umbrella headers
-- Optionally signs the XCFramework with a code signing identity
-
-### 5. Verification (\`--verify\`)
-
-Validates the built XCFrameworks for correctness:
-
-- Verifies Info.plist validity
-- Checks codesign status
-- Scans for junk files (source files that shouldn't be in the framework)
-- For each slice:
-  - Validates Mach-O binary format
-  - Checks linked dependencies
-  - Verifies Headers directory presence
-  - Verifies Modules directory and module.modulemap
-  - Tests modular header compilation with clang
-  - Typechecks Swift interface files with swift-frontend
-
-## Code Signing
-
-XCFrameworks can be signed with a code signing identity to provide integrity verification and source attribution.
-
-### Why Sign XCFrameworks?
-
-- **Integrity verification**: Proves the framework hasn't been tampered with after distribution
-- **Source attribution**: Confirms the framework came from a trusted source (e.g., Expo)
-- **Gatekeeper compatibility**: Avoids macOS warnings when extracting downloaded archives
-
-### Signing Behavior
-
-- **Signing is optional**: If no `--identity` is provided, frameworks are left unsigned
-- **Unsigned frameworks work fine**: Xcode re-signs all embedded frameworks when building your app
-- **Timestamp enabled by default**: The `--timestamp` flag ensures signatures remain valid after certificate expiry
-
-### Certificate Requirements
-
-Any valid Apple Developer Program signing certificate works:
-
-- Apple Development
-- Apple Distribution
-- Organization certificates (recommended for CI)
-
-For CI/CD, store your P12 certificate and password as secrets and use `apple-actions/import-codesign-certs@v3` to import into the keychain before building.
-
-## Usage
-
-### Command Line
-
-The prebuild system is invoked through the \`et\` (expotools) CLI:
-
-\`\`\`bash
-
-# Run all steps (artifacts, generate, build, compose, verify) for all flavors
-
+```bash
 et prebuild expo-modules-core
+```
 
-# Skip verification (faster iteration)
+Common variants:
 
+```bash
+# Build only Debug
+et prebuild -f Debug expo-modules-core
+
+# Skip verify
 et prebuild --skip-verify expo-modules-core
 
-# Build with local tarballs (useful for testing local changes)
-
-# Use {flavor} placeholder for per-flavor paths
-
-et prebuild \\
--f Debug \\
---local-react-native-tarball "/path/to/{flavor}/React.xcframework.tar.gz" \\
-expo-modules-core
-
-# Build for Release only
-
-et prebuild -f Release expo-modules-core
-
-# Build a specific product from a multi-product package
-
+# Build only one product
 et prebuild -n ExpoModulesCore expo-modules-core
 
-# Build for a specific platform only
-
+# Build only one platform
 et prebuild -p iOS expo-modules-core
-
-# Skip build and compose (generate and verify only)
-
-et prebuild --skip-build --skip-compose expo-modules-core
-
-# Clean everything and rebuild
-
-et prebuild --clean expo-modules-core
-
-# Clean including dependency cache
-
-et prebuild --clean --clean-cache expo-modules-core
-
-# Sign XCFrameworks with a code signing identity
-
-et prebuild -s "Apple Development" expo-modules-core
-
-# Sign XCFrameworks without timestamp (for offline/testing scenarios)
-
-et prebuild -s "Apple Development" --no-timestamp expo-modules-core
-
-# Verbose output (full build logs instead of spinners)
-
-et prebuild -v expo-modules-core
-\`\`\`
-
-### CLI Options
-
-| Option                                       | Description                                                                                   |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| \`-v, --verbose\`                            | Enable verbose output (full build logs instead of spinners)                                   |
-| \`--react-native-version <version>\`         | React Native version (auto-detected from bare-expo if not set)                                |
-| \`--hermes-version <version>\`               | Hermes version (auto-detected if not set)                                                     |
-| \`-f, --flavor <flavor>\`                    | Build flavor: \`Debug\` or \`Release\`. If not specified, builds both                         |
-| \`--local-react-native-tarball <path>\`      | Local React Native tarball path. Supports \`{flavor}\` placeholder                            |
-| \`--local-hermes-tarball <path>\`            | Local Hermes tarball path. Supports \`{flavor}\` placeholder                                  |
-| \`--local-react-native-deps-tarball <path>\` | Local React Native Dependencies tarball path. Supports \`{flavor}\` placeholder               |
-| \`--clean\`                                  | Clean all package outputs (xcframeworks, generated code, build folders). Does not touch cache |
-| \`--clean-cache\`                            | Clear entire dependency cache (forces re-download)                                            |
-| \`--skip-generate\`                          | Skip the generate step                                                                        |
-| \`--skip-artifacts\`                         | Skip downloading build artifacts                                                              |
-| \`--skip-build\`                             | Skip the build step                                                                           |
-| \`--skip-compose\`                           | Skip composing xcframeworks                                                                   |
-| \`--skip-verify\`                            | Skip verification of built xcframeworks                                                       |
-| \`-p, --platform <platform>\`                | Build for specific platform only                                                              |
-| \`-n, --product <name>\`                     | Build specific product from multi-product package                                             |
-| \`--include-external\`                       | Include external (third-party) packages                                                       |
-| \`-s, --sign <identity>\`                    | Code signing identity to sign XCFrameworks                                                    |
-| \`--no-timestamp\`                           | Disable secure timestamp when signing (timestamp enabled by default)                          |
-
-**Note:** All steps run by default. Use \`--skip-\*\` flags to exclude specific steps.
-
-### Build Flavors
-
-- **Debug** - Includes debug symbols (\`DEBUG_INFORMATION_FORMAT=dwarf-with-dsym\`)
-- **Release** - Optimized for production
-
-### Build Platforms
-
-Each platform defined in \`spm.config.json\` expands to specific build destinations:
-
-| Platform Config       | Build Destinations             |
-| --------------------- | ------------------------------ |
-| \`iOS(.v15)\`         | \`iOS\`, \`iOS Simulator\`     |
-| \`macOS(.v11)\`       | \`macOS\`                      |
-| \`tvOS(.v15)\`        | \`tvOS\`, \`tvOS Simulator\`   |
-| \`macCatalyst(.v15)\` | \`macOS,variant=Mac Catalyst\` |
-
-## Output
-
-The build process produces the following:
-
 ```
-packages/precompile/.build/<package-name>/
-├── generated/
-│   └── <ProductName>/         # Generated SPM source structure per product
-│       ├── Package.swift
-│       └── <TargetName>/      # Symlinked source files
-├── output/
-│   └── framework/             # Intermediate build artifacts
-└── codegen/                   # React Native codegen output
 
-<package-dir>/
-├── xcframeworks/
-│   └── debug|release/
-│       └── ProductName.xcframework/
-│           ├── Info.plist
-│           ├── ios-arm64/
-│           │   └── ProductName.framework/
-│           │       ├── Headers/
-│           │       ├── Modules/module.modulemap
-│           │       └── ProductName (binary)
-│           └── ios-arm64_x86_64-simulator/
-│               └── ...
-└── .dependencies/              # Copied dependency XCFrameworks
-    ├── Hermes/
-    ├── React-Core-prebuilt/
-    └── ReactNativeDependencies/
-\`\`\`
+## Key Concepts (Glossary)
 
-### XCFramework Contents
+- `Package`: one Expo or external package with `spm.config.json`.
+- `Product`: one output product in `spm.config.json`.
+- `Flavor`: build flavor (`Debug` or `Release`).
+- `Unit`: execution identity `package/product@flavor`.
+- `Run`: one `et prebuild` invocation.
+- `Artifact cache`: shared external dependency cache (Hermes/React/etc.).
+- `Generated sources`: staged source layout used by SPM builds.
 
-Each framework slice contains:
-- Binary executable
-- \`Headers/\` - All public headers (flattened)
-- \`Modules/module.modulemap\` - Module map for Swift/Clang interop
-- \`ProductName_umbrella.h\` - Umbrella header including all public headers
+## Command Entry Points
 
-## XCFramework Verification
+- CLI command shim: `tools/src/commands/PrebuildPackages.ts`
+- Prebuild modules: `tools/src/prebuilds/*`
+- Refactor plan: `tools/src/prebuilds/PREBUILD_REFACTOR_PLAN.md`
 
-The \`Verifier\` module provides comprehensive verification of built XCFrameworks:
+The command file should remain thin and delegate execution to prebuild internals.
 
-### Verification Checks
+## Main Modules
 
-| Check | Description |
-|-------|-------------|
-| Info.plist | Validates the XCFramework's Info.plist is well-formed |
-| Codesign | Verifies code signature (may fail for debug/local builds) |
-| Junk Files | Scans for source files that shouldn't be in the framework |
-| Mach-O Info | Validates binary format with `lipo`, `file`, and `otool` |
-| Headers | Verifies Headers directory presence |
-| Modules | Verifies Modules directory presence |
-| Module Map | Checks for module.modulemap file |
-| Modular Headers | Compiles headers with clang to verify modularity |
-| Clang Module Import | Tests `@import ModuleName` with clang |
-| Swift Interface | Typechecks .swiftinterface files with swift-frontend |
+- `SPMGenerator.ts`: generates staged target source layout and `Package.swift`.
+- `SPMPackage.ts`: renders `Package.swift` content from config.
+- `SPMBuild.ts`: builds package targets with `xcodebuild`.
+- `Frameworks.ts`: composes and post-processes XCFramework outputs.
+- `Verifier.ts`: validates built XCFrameworks.
+- `Dependencies.ts` / `Artifacts.ts`: resolve and cache build dependencies.
+- `Utils.ts` / `ExternalPackage.ts`: discovery, versioning, validation helpers.
 
-### Verification Output
+## Module Ownership Map
 
-The verification produces a detailed report for each slice:
-- ✅ Success indicators for passing checks
-- ⚠️ Warnings for non-critical issues
-- ❌ Failures for critical problems
-- Linked dependencies list
-- Detailed error messages when checks fail
+This map is the source of truth for where responsibilities should live.
 
-## Error Handling
+| Area | Primary owner | Notes |
+| --- | --- | --- |
+| CLI wiring and flags | `tools/src/commands/PrebuildPackages.ts` | Keep as thin shim only. |
+| Pipeline entrypoint | `tools/src/prebuilds/pipeline/Index.ts` | Receives normalized request from shim. |
+| Contracts and shared types | `tools/src/prebuilds/pipeline/Types.ts` | Step contract, status/result types. |
+| Runtime context | `tools/src/prebuilds/pipeline/Context.ts` | Paths, resolved artifacts, cancellation, run state. |
+| Step orchestration | `tools/src/prebuilds/pipeline/Executor.ts` | Sequencing, error policy, status transitions. |
+| Run-scope steps | `tools/src/prebuilds/pipeline/RunSteps.ts` | Discovery, validation, versioning, artifact prep, reporting hooks. |
+| Package-scope steps | `tools/src/prebuilds/pipeline/PackageSteps.ts` | Scoped clean and package-level prep hooks. |
+| Product-scope steps | `tools/src/prebuilds/pipeline/ProductSteps.ts` | Codegen, generate, build, compose, verify. |
+| Summary and error log output | `tools/src/prebuilds/pipeline/Reporter.ts` | Final reporting from canonical statuses. |
+| SPM source staging | `tools/src/prebuilds/SPMGenerator.ts` | File layout/symlink mechanics. |
+| `Package.swift` rendering | `tools/src/prebuilds/SPMPackage.ts` | Transform config to Swift package manifest text. |
+| Build invocation | `tools/src/prebuilds/SPMBuild.ts` | `xcodebuild` build paths and arguments. |
+| XCFramework composition | `tools/src/prebuilds/Frameworks.ts` | Slice composition, headers/modules, tarball outputs. |
+| Verification | `tools/src/prebuilds/Verifier.ts` | Slice-level validation and diagnostics. |
+| Artifact download/cache | `tools/src/prebuilds/Artifacts.ts`, `tools/src/prebuilds/Dependencies.ts` | Shared cache resolution (`run x flavor`). |
 
-The \`XCodeRunner.ts\` module provides formatted build output using \`@expo/xcpretty\`:
+## Build Flow
 
-- **Interactive mode**: Spinner showing current build action
-- **CI mode** (\`CI=1\`): Full formatted output without spinner
-- **Verbose mode** (\`EXPO_DEBUG=1\`): Complete build output
+Current high-level flow:
 
-Build failures display:
-- Compilation errors with file locations
-- Warnings
-- Build summary
+1. Discover/validate packages and options.
+2. Resolve versions and local tarball inputs.
+3. Resolve artifact cache per flavor.
+4. For each package/product/flavor unit:
+   - generate sources + `Package.swift`
+   - build frameworks
+   - compose XCFramework
+   - verify XCFramework
+5. Print summary and write error log when needed.
+
+## Invariants And Policies
+
+These are intentionally explicit so they can be relied upon by maintainers and tooling.
+
+- Source of truth for outcomes is per-unit status records.
+- Summary totals are derived from statuses.
+- Phase 1 execution model is sequential.
+- Cancellation model is cooperative (stop scheduling new work, emit partial summary).
+- Artifact resolution scope is `run x flavor`.
+- `warning` status is currently only valid for verification stage.
+
+For full architecture and phased decisions, see:
+`tools/src/prebuilds/PREBUILD_REFACTOR_PLAN.md`
+
+## Output Modes
+
+Local interactive mode:
+
+- Spinner + concise subtask progress.
+- Terminal status per stage.
+
+CI/non-interactive mode:
+
+- No spinner animation.
+- Stable line-oriented logs with key lines:
+  - stage start
+  - stage result
+  - final summary
+  - error log path (if any)
+
+## Important Paths
+
+- Config schema:
+  - `tools/src/prebuilds/schemas/spm.config.schema.json`
+- Generated build root (centralized):
+  - `packages/precompile/.build/<package>/...`
+- Artifact cache default:
+  - `packages/precompile/.cache/...`
+
+## Configuration Notes
+
+Each package must define `spm.config.json` with:
+
+- `products`
+- target graph (`swift` / `objc` / `cpp` / `framework`)
+- platforms
+- optional external dependency metadata
+
+Use the schema above for field-level reference.
 
 ## Troubleshooting
 
-### Common Issues
+`No Package.swift file found`
+- Ensure generate step ran and `spm.config.json` is valid.
 
-**Missing Hermes version:**
-\`\`\`
-Hermes version is required. Check node_modules/react-native/sdks/.hermesversion
-\`\`\`
-Solution: Provide \`--hermes-version\` flag with the correct version.
+`Missing artifacts`
+- Check resolved RN/Hermes versions and tarball paths.
+- Verify cache path and skip flags.
 
-**Package not found:**
-Ensure the package exists in the \`packages/\` directory and has an \`spm.config.json\` file.
+`Compose failed`
+- Inspect build outputs for requested platform/flavor.
 
-**Build failures:**
-Run with \`-v\` (verbose) or \`EXPO_DEBUG=1\` for full output to see detailed error messages.
+`Verify failed`
+- Review slice-level diagnostics for headers/modules/typecheck/codesign.
 
-**Artifacts not found:**
-If you're using \`--skip-artifacts\`, ensure the artifacts have been previously downloaded. Remove \`--skip-artifacts\` to download them.
+## Contributor Rules
 
-### Debugging Tips
+When changing prebuild behavior/architecture:
 
-1. Use `--skip-build --skip-compose --skip-verify` to inspect the generated `Package.swift` without building
-2. Open the `packages/precompile/.build/<package-name>/generated/<ProductName>/` folder in Xcode to debug SPM resolution issues
-3. Check the `packages/precompile/.build/<package-name>/output/<flavor>/frameworks/` folder for intermediate build artifacts (per-platform .framework files)
-4. Check the `packages/precompile/.build/<package-name>/output/<flavor>/xcframeworks/` folder for composed XCFrameworks
-5. Use local tarballs (`--local-react-native-tarball`, etc.) to test changes to dependencies
-6. Use `--skip-generate --skip-build --skip-compose` to only verify existing frameworks
-7. Use `--clean` to start fresh if you encounter strange build issues
-8. Use `-v` for full build output when debugging xcodebuild failures
+1. Update this README in the same PR.
+2. Keep terminology consistent with glossary and plan.
+3. Prefer explicit invariants over implicit assumptions.
+4. Add/update tests for path logic and execution gating when relevant.
 
-```
+## LLM-Oriented Section (Deterministic)
+
+If an automated tool edits prebuild code, it should preserve and update these items:
+
+- Keep `tools/src/commands/PrebuildPackages.ts` as command shim.
+- Keep canonical outcome state in statuses.
+- Keep sequential execution unless plan section explicitly changes.
+- Update both:
+  - `tools/src/prebuilds/PREBUILD_REFACTOR_PLAN.md`
+  - `tools/src/prebuilds/README.md`
+
+If behavior changes, update:
+
+- Build Flow section
+- Invariants And Policies section
+- Contributor Rules section

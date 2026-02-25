@@ -1,6 +1,6 @@
 // Copyright 2022-present 650 Industries. All rights reserved.
 
-import SDWebImage
+@_implementationOnly import SDWebImage
 import ExpoModulesCore
 
 /**

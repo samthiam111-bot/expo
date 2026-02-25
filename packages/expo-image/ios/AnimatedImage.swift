@@ -1,6 +1,6 @@
 // Copyright 2024-present 650 Industries. All rights reserved.
 
-import SDWebImage
+@_implementationOnly import SDWebImage
 
 /**
  Custom `SDAnimatedImage` that fixes issues with `images` and `duration` not being available.

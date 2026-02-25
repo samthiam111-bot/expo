@@ -4,7 +4,9 @@ import fs from 'fs';
 import path from 'path';
 
 import { PACKAGES_DIR } from '../Constants';
+import { getPrecompileDir } from '../Directories';
 import logger from '../Logger';
+import { getPackageByName } from '../Packages';
 import {
   BuildFlavor,
   BuildPlatform,
@@ -98,11 +100,13 @@ function sortPackagesByDependencies(packages: SPMPackageSource[]): SPMPackageSou
       for (const product of spmConfig.products) {
         if (product.externalDependencies) {
           for (const dep of product.externalDependencies) {
-            // Dependencies can be "package-name" or "package-name/ProductName" or just "ProductName"
+            // Dependencies can be "package-name" or "package-name/ProductName"
+            // or "@scope/package-name/ProductName" or just "ProductName"
             let packageName: string;
             if (dep.includes('/')) {
-              // Format: "package-name/ProductName" - use the package name part
-              packageName = dep.split('/')[0];
+              // Handle scoped packages: @expo/ui/ExpoUI -> @expo/ui
+              const parts = dep.split('/');
+              packageName = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
             } else {
               // Could be a bare product name (e.g., "RNWorklets") or a package name
               // Try to resolve as product name first, fallback to literal
@@ -122,13 +126,13 @@ function sortPackagesByDependencies(packages: SPMPackageSource[]): SPMPackageSou
   }
 
   // Topological sort using Kahn's algorithm
+  // Use packageMap.size for comparisons since it deduplicates by name
   const sorted: SPMPackageSource[] = [];
   const inDegree = new Map<string, number>();
 
   // Calculate in-degrees (number of dependencies each package has within our build set)
-  for (const pkg of packages) {
-    const deps = dependsOn.get(pkg.packageName) ?? new Set();
-    inDegree.set(pkg.packageName, deps.size);
+  for (const [name, deps] of dependsOn) {
+    inDegree.set(name, deps.size);
   }
 
   // Find all packages with no dependencies (in-degree 0)
@@ -160,9 +164,10 @@ function sortPackagesByDependencies(packages: SPMPackageSource[]): SPMPackageSou
   }
 
   // If we didn't get all packages, there's a cycle - report it and return original order
-  if (sorted.length !== packages.length) {
+  if (sorted.length !== packageMap.size) {
     // Find packages involved in the cycle (those not yet sorted)
-    const unsortedPackages = packages.filter((p) => !sorted.includes(p)).map((p) => p.packageName);
+    const sortedNames = new Set(sorted.map((p) => p.packageName));
+    const unsortedPackages = [...packageMap.keys()].filter((name) => !sortedNames.has(name));
 
     logger.warn(`⚠️  Circular dependency detected in packages, building in original order`);
     logger.warn(`   Packages involved in cycle: ${chalk.yellow(unsortedPackages.join(', '))}`);
@@ -180,17 +185,94 @@ function sortPackagesByDependencies(packages: SPMPackageSource[]): SPMPackageSou
       }
     }
 
-    return packages;
+    // Return deduplicated list in original order
+    return [...packageMap.values()];
   }
 
   // Log the build order if it differs from input
-  const originalOrder = packages.map((p) => p.packageName).join(', ');
+  const originalOrder = [...packageMap.keys()].join(', ');
   const sortedOrder = sorted.map((p) => p.packageName).join(', ');
   if (originalOrder !== sortedOrder) {
     logger.info(`📋 Build order (sorted by dependencies):\n${chalk.cyan(sortedOrder)}`);
   }
 
   return sorted;
+}
+
+/**
+ * Standard external dependencies that come from the cache (not from other packages).
+ */
+const CACHE_DEPS = new Set(['ReactNativeDependencies', 'React', 'Hermes']);
+
+/**
+ * Expands the package list to include unbuilt dependencies.
+ * When a package depends on another monorepo package (via externalDependencies)
+ * and that dependency's xcframework doesn't exist yet, it's automatically added
+ * to the build set so the build can succeed without manual intervention.
+ */
+function expandWithUnbuiltDependencies(packages: SPMPackageSource[]): SPMPackageSource[] {
+  const packagesByName = new Map(packages.map((p) => [p.packageName, p]));
+  const added = new Map<string, SPMPackageSource>();
+
+  // Iterate until no new packages are discovered
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const currentSet = [...packagesByName.values(), ...added.values()];
+
+    for (const pkg of currentSet) {
+      let spmConfig;
+      try {
+        spmConfig = pkg.getSwiftPMConfiguration();
+      } catch {
+        continue;
+      }
+
+      for (const product of spmConfig.products) {
+        if (!product.externalDependencies) continue;
+
+        for (const dep of product.externalDependencies) {
+          if (!dep.includes('/')) continue;
+
+          // Parse package name and product name (handle scoped: @expo/ui/ExpoUI)
+          const parts = dep.split('/');
+          const isScoped = parts[0].startsWith('@');
+          const depPackageName = isScoped ? `${parts[0]}/${parts[1]}` : parts[0];
+          const depProductName = isScoped ? parts[2] : parts[1];
+
+          // Skip cache deps and deps already in the build set
+          if (CACHE_DEPS.has(depPackageName)) continue;
+          if (packagesByName.has(depPackageName) || added.has(depPackageName)) continue;
+
+          // Check if the xcframework already exists (for both debug and release)
+          const depBuildPath = path.join(getPrecompileDir(), '.build', depPackageName);
+          const debugExists = fs.existsSync(
+            Frameworks.getFrameworkPath(depBuildPath, depProductName, 'Debug')
+          );
+          const releaseExists = fs.existsSync(
+            Frameworks.getFrameworkPath(depBuildPath, depProductName, 'Release')
+          );
+
+          if (debugExists && releaseExists) continue;
+
+          // Try to find the package and add it to the build set
+          const depPkg = getPackageByName(depPackageName);
+          if (depPkg && depPkg.hasSwiftPMConfiguration()) {
+            logger.info(
+              `📎 Auto-adding ${chalk.cyan(depPackageName)} (required by ${chalk.green(pkg.packageName)}, xcframework not found)`
+            );
+            added.set(depPackageName, depPkg);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (added.size > 0) {
+    return [...packages, ...added.values()];
+  }
+  return packages;
 }
 
 /**
@@ -235,12 +317,15 @@ async function main(packageNames: string[], options: ActionOptions) {
 
     // 1. Check that packages exist and have spm.config.json (or discover all if none provided)
     //    Use verifyAllPackagesAsync to support both Expo and external packages
-    const unsortedPackages = await verifyAllPackagesAsync(packageNames, includeExternal);
+    const requestedPackages = await verifyAllPackagesAsync(packageNames, includeExternal);
 
-    // 2. Validate that podName in spm.config.json matches actual .podspec files
+    // 2. Auto-add unbuilt dependencies to the build set
+    const unsortedPackages = expandWithUnbuiltDependencies(requestedPackages);
+
+    // 3. Validate that podName in spm.config.json matches actual .podspec files
     await validateAllPodNamesAsync(unsortedPackages);
 
-    // 3. Sort packages by dependencies (packages with no deps first)
+    // 4. Sort packages by dependencies (packages with no deps first)
     const packages = sortPackagesByDependencies(unsortedPackages);
 
     // Log external packages if any
@@ -251,10 +336,10 @@ async function main(packageNames: string[], options: ActionOptions) {
       );
     }
 
-    // 4. Get versions for React Native and Hermes - we're using bare-expo as the source of truth
+    // 5. Get versions for React Native and Hermes - we're using bare-expo as the source of truth
     const { reactNativeVersion, hermesVersion } = await getVersionsInfoAsync(options);
 
-    // 5. Verify that the tarball paths exist if provided - this is a way to test locally built tarballs,
+    // 6. Verify that the tarball paths exist if provided - this is a way to test locally built tarballs,
     //    and can be used to test out local Hermes, React Native or React Native Dependencies changes.
     //    Skip validation for paths containing {flavor} placeholder — those are validated after resolution.
     const hasPlaceholder = (p?: string) => p?.includes('{flavor}') || p?.includes('{Flavor}');
