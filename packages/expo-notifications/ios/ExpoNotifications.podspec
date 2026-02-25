@@ -20,14 +20,11 @@ Pod::Spec.new do |s|
 
   s.resource_bundles = {'ExpoNotifications_privacy' => ['PrivacyInfo.xcprivacy']}
 
-  if (!Expo::PackagesConfig.instance.try_link_with_prebuilt_xcframework(s))
-    s.static_framework = true
-    s.source_files = "#{s.name}/**/*.{h,m,swift}"
-    s.pod_target_xcconfig = {
-      'DEFINES_MODULE' => 'YES',
-      'SWIFT_COMPILATION_MODE' => 'wholemodule'
-    }
-  end
+  s.source_files = "#{s.name}/**/*.{h,m,swift}"
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'SWIFT_COMPILATION_MODE' => 'wholemodule'
+  }
 
   s.exclude_files = 'Tests/'
   s.test_spec 'Tests' do |test_spec|

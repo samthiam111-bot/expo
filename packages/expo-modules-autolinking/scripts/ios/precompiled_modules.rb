@@ -12,7 +12,8 @@
 #
 # Pod install flow:
 #   1. has_prebuilt_xcframework?(pod_name) returns true → autolinking uses :podspec instead of :path
-#   2. Podspec calls try_link_with_prebuilt_xcframework(spec) inline at spec creation
+#   2. store_podspec hook auto-patches the spec via patch_spec_for_prebuilt (sandbox.rb)
+#      (ExpoModulesCore still uses inline try_link_with_prebuilt_xcframework for ExpoModulesJSI)
 #   3. spec.source is set to {:http => "file:///<tarball>"} → CocoaPods extracts into Pods/<PodName>/
 #   4. prepare_command copies both flavor tarballs into artifacts/ subdirectory
 #   5. Script phases switch debug/release at build time via tarball extraction
@@ -23,7 +24,6 @@
 #   artifacts/<Product>-release.tar.gz        (copied by prepare_command)
 #   artifacts/.last_build_configuration       (written by prepare_command / switch script)
 
-require 'digest'
 require 'fileutils'
 require 'uri'
 
@@ -84,17 +84,16 @@ module Expo
       def has_prebuilt_xcframework?(pod_name)
         return false unless enabled?
 
-        pod_info = get_pod_lookup_map[pod_name]
-        return false unless pod_info
-
-        product_name = pod_info[:product_name] || pod_name
-        build_tarball = File.join(pod_info[:build_output_dir], build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
-        File.exist?(build_tarball)
+        !resolve_prebuilt_info(pod_name).nil?
       end
 
       # Returns external (3rd-party) pods that have prebuilt XCFrameworks.
       # These need to be registered with :podspec before RN CLI's use_native_modules!
       # registers them with :path (which would ignore spec.source).
+      #
+      # For external pods registered with :podspec, CocoaPods downloads source using
+      # spec.source BEFORE store_podspec can patch it. So we generate pre-patched
+      # podspec JSON files with source already set to the local tarball URL.
       #
       # @param project_directory [Pathname] The project root for computing relative paths
       # @return [Array<Hash>] Array of {:pod_name, :podspec_path} for external prebuilt pods
@@ -110,14 +109,57 @@ module Expo
           podspec_file = File.join(info[:podspec_dir], "#{pod_name}.podspec")
           next unless File.exist?(podspec_file)
 
-          podspec_rel = Pathname.new(podspec_file).relative_path_from(project_directory).to_s
+          # Generate a pre-patched podspec JSON file. CocoaPods downloads source using
+          # spec.source before store_podspec runs, so the podspec must already have the
+          # tarball URL when CocoaPods first reads it.
+          patched_podspec = generate_prepatched_podspec(pod_name, podspec_file, info)
+          next unless patched_podspec
+
+          podspec_rel = Pathname.new(patched_podspec).relative_path_from(project_directory).to_s
           results << { pod_name: pod_name, podspec_path: podspec_rel }
         end
 
         results
       end
 
+      # Generates a pre-patched podspec JSON file for an external pod.
+      # Evaluates the original podspec, patches it via patch_spec_for_prebuilt,
+      # and writes the result as a .podspec.json file next to the original.
+      #
+      # @param pod_name [String] The pod name
+      # @param podspec_file [String] Path to the original .podspec file
+      # @param info [Hash] Package info from spm.config.json lookup
+      # @return [String, nil] Path to the generated .podspec.json, or nil on failure
+      def generate_prepatched_podspec(pod_name, podspec_file, info)
+        begin
+          spec = Pod::Specification.from_file(podspec_file)
+        rescue => e
+          Pod::UI.warn "[Expo-precompiled] Failed to evaluate podspec for #{pod_name}: #{e.message}"
+          return nil
+        end
+
+        patched_spec = patch_spec_for_prebuilt(spec)
+        return nil if patched_spec.equal?(spec) # patch_spec_for_prebuilt returns original on failure
+
+        # Strip dependencies — the xcframework is pre-compiled and all SPM dependencies
+        # (e.g., lottie-ios, Skia libs) are bundled in the tarball. Dependencies added by
+        # install_modules_dependencies (fast_float, React-Codegen, etc.) are not needed
+        # and may not be resolvable when the podspec is first read by CocoaPods.
+        spec_json = JSON.parse(patched_spec.to_pretty_json)
+        spec_json.delete('dependencies')
+
+        # Write the patched podspec JSON next to the original
+        json_path = podspec_file.sub(/\.podspec$/, '.podspec.json')
+        File.write(json_path, JSON.pretty_generate(spec_json))
+
+        json_path
+      end
+
       # Links a pod spec with a prebuilt XCFramework.
+      #
+      # NOTE: This method is only used by ExpoModulesCore.podspec, which needs an inline
+      # conditional for its source-only ExpoModulesJSI dependency. All other pods are
+      # handled by auto-patching in store_podspec → patch_spec_for_prebuilt.
       #
       # Sets spec.source to the local tarball so CocoaPods extracts it into Pods/<PodName>/.
       # Adds a prepare_command to copy both flavor tarballs into artifacts/.
@@ -130,23 +172,14 @@ module Expo
       def try_link_with_prebuilt_xcframework(spec)
         return false unless enabled?
 
-        # Look up the package info from spm.config.json
-        pod_info = get_pod_lookup_map[spec.name]
-        unless pod_info
-          log_linking_status(spec.name, false, "not found in spm.config.json")
+        resolved = resolve_prebuilt_info(spec.name)
+        unless resolved
+          log_linking_status(spec.name, false, "no prebuilt xcframework available")
           return false
         end
 
-        # The xcframework is named after the SPM product name, not the pod name
-        product_name = pod_info[:product_name] || spec.name
+        pod_info, product_name, default_tarball = resolved
         build_output_dir = pod_info[:build_output_dir]
-
-        # Find the default flavor tarball in the build output
-        default_tarball = File.join(build_output_dir, build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
-        unless File.exist?(default_tarball)
-          log_linking_status(spec.name, false, default_tarball)
-          return false
-        end
 
         log_linking_status(spec.name, true, default_tarball)
 
@@ -154,17 +187,7 @@ module Expo
         # URI::File.build produces file:///path (three slashes) which CocoaPods requires for local files.
         # :flatten => false prevents CocoaPods from unwrapping the single top-level xcframework directory.
         spec.source = { :http => URI::File.build(path: default_tarball).to_s, :flatten => false }
-
-        # Vendored frameworks — resolved directly from Pods/<PodName>/
-        vendored_paths = ["#{product_name}.xcframework"]
-
-        # SPM dependency xcframeworks (extracted from the same tarball)
-        (pod_info[:spm_dependency_frameworks] || []).each do |dep_name|
-          vendored_paths << "#{dep_name}.xcframework"
-          Pod::UI.info "#{"[Expo-precompiled] ".blue}     📦 #{dep_name}.xcframework".green
-        end
-
-        spec.vendored_frameworks = vendored_paths
+        spec.vendored_frameworks = build_vendored_paths(product_name, pod_info)
 
         # prepare_command: self-healing extraction if CocoaPods cache was stale
         # NOTE: Artifact copying (flavor tarballs) is handled by ensure_artifacts in post_install,
@@ -175,6 +198,148 @@ module Expo
         add_script_phases(spec, product_name, pod_info)
 
         true
+      end
+
+      # Checks whether a podspec should be auto-patched for precompiled module support.
+      # Returns true if the pod has a prebuilt xcframework AND the spec hasn't already
+      # been configured by an inline try_link_with_prebuilt_xcframework call.
+      #
+      # ExpoModulesCore is excluded — it has a source-only dependency on ExpoModulesJSI
+      # that requires special handling via the inline conditional.
+      #
+      # @param name [String] The pod name
+      # @param spec [Pod::Specification] The evaluated podspec
+      # @return [Boolean] true if the spec should be auto-patched
+      def should_auto_patch_spec?(name, spec)
+        return false unless enabled?
+
+        # Skip ExpoModulesCore — it keeps its inline conditional for ExpoModulesJSI
+        return false if name == 'ExpoModulesCore'
+
+        # Check if the pod has a prebuilt xcframework
+        return false unless has_prebuilt_xcframework?(name)
+
+        # Skip if already configured by inline try_link_with_prebuilt_xcframework
+        # (detected by vendored_frameworks containing .xcframework entries)
+        vendored = spec.attributes_hash['vendored_frameworks']
+        if vendored
+          frameworks = vendored.is_a?(Array) ? vendored : [vendored]
+          return false if frameworks.any? { |f| f.to_s.include?('.xcframework') }
+        end
+
+        true
+      end
+
+      # Takes a fully-evaluated podspec (with source-build attributes set),
+      # converts it to JSON, patches it for precompiled xcframework usage,
+      # and returns a new Pod::Specification.
+      #
+      # Patches applied:
+      # - source → tarball file:// URL
+      # - vendored_frameworks → product + SPM dependency xcframeworks
+      # - Clears source_files, exclude_files, static_framework, header_dir,
+      #   header_mappings_dir, private_header_files, compiler_flags
+      # - Clears platform-specific source attributes
+      # - Removes subspecs and testspecs
+      # - Sets prepare_command and script_phases
+      # - Ensures pod_target_xcconfig.DEFINES_MODULE = YES
+      #
+      # @param spec [Pod::Specification] The podspec to patch
+      # @return [Pod::Specification] A new patched specification
+      def patch_spec_for_prebuilt(spec)
+        resolved = resolve_prebuilt_info(spec.name)
+        return spec unless resolved
+
+        pod_info, product_name, default_tarball = resolved
+        build_output_dir = pod_info[:build_output_dir]
+
+        log_linking_status(spec.name, true, default_tarball)
+
+        spec_json = JSON.parse(spec.to_pretty_json)
+
+        # Override source to local tarball
+        spec_json['source'] = { 'http' => URI::File.build(path: default_tarball).to_s, 'flatten' => false }
+
+        # Set vendored frameworks
+        spec_json['vendored_frameworks'] = build_vendored_paths(product_name, pod_info)
+
+        # Clear source-build attributes
+        %w[source_files exclude_files static_framework header_dir
+           header_mappings_dir private_header_files compiler_flags].each do |attr|
+          spec_json.delete(attr)
+        end
+
+        # Clear platform-specific source attributes
+        %w[ios osx tvos watchos visionos].each do |platform|
+          next unless spec_json[platform].is_a?(Hash)
+          %w[source_files exclude_files private_header_files
+             header_dir header_mappings_dir compiler_flags vendored_frameworks].each do |attr|
+            spec_json[platform].delete(attr)
+          end
+          spec_json.delete(platform) if spec_json[platform].empty?
+        end
+
+        # Remove subspecs and testspecs (source file groupings / test files not in tarball)
+        spec_json.delete('subspecs')
+        spec_json.delete('testspecs')
+
+        # Set prepare_command (self-healing extraction)
+        spec_json['prepare_command'] = prepare_command_script(product_name, build_output_dir)
+
+        # Set script phases (switch + dSYM phases)
+        spec_json['script_phases'] = build_script_phases_json(spec.name, product_name, pod_info)
+
+        # Ensure DEFINES_MODULE is set
+        spec_json['pod_target_xcconfig'] ||= {}
+        spec_json['pod_target_xcconfig']['DEFINES_MODULE'] = 'YES'
+
+        Pod::Specification.from_json(spec_json.to_json)
+      end
+
+      # Builds the switch and dSYM script phases as JSON-compatible hashes
+      # (string keys, string values for execution_position).
+      # Reuses xcframework_switch_script and dsym_resolve_script for script content.
+      #
+      # @param spec_name [String] The pod name (for phase naming and path resolution)
+      # @param product_name [String] The product/module name
+      # @param pod_info [Hash] Package info from spm.config.json lookup
+      # @return [Array<Hash>] Array of script phase hashes with string keys
+      def build_script_phases_json(spec_name, product_name, pod_info)
+        project_root = Pod::Config.instance.installation_root
+        scripts_dir = __dir__
+        switch_script_rel = Pathname.new(File.join(scripts_dir, 'replace-xcframework.js')).relative_path_from(project_root).to_s
+        dsym_script_rel = Pathname.new(File.join(scripts_dir, 'resolve-dsym-sourcemaps.js')).relative_path_from(project_root).to_s
+        package_root_rel = Pathname.new(pod_info[:package_root]).relative_path_from(project_root).to_s
+
+        pods_parent = "$PODS_ROOT/.."
+        switch_script_path = "#{pods_parent}/#{switch_script_rel}"
+        dsym_script_path = "#{pods_parent}/#{dsym_script_rel}"
+        xcframeworks_dir_var = "$PODS_ROOT/#{spec_name}"
+        package_root_var = "#{pods_parent}/#{package_root_rel}"
+
+        dsym_stamp = "$(DERIVED_FILE_DIR)/expo-dsym-resolve-#{product_name}-$(CONFIGURATION).stamp"
+        npm_package = pod_info[:npm_package]
+
+        switch_phase = {
+          'name' => "[Expo] Switch #{spec_name} XCFramework for build configuration",
+          'execution_position' => 'before_compile',
+          'input_files' => ["#{pods_parent}/#{switch_script_rel}"],
+          'script' => xcframework_switch_script(product_name, xcframeworks_dir_var, switch_script_path),
+        }
+
+        if Gem::Version.new(Pod::VERSION) >= Gem::Version.new('1.13.0')
+          switch_phase['always_out_of_date'] = '1'
+        end
+
+        dsym_phase = {
+          'name' => "[Expo] Resolve #{spec_name} dSYM source maps",
+          'execution_position' => 'before_compile',
+          'input_files' => ["#{pods_parent}/#{dsym_script_rel}"],
+          'output_files' => [dsym_stamp],
+          'script' => dsym_resolve_script(product_name, xcframeworks_dir_var, dsym_script_path, npm_package, package_root_var),
+        }
+
+        [switch_phase, dsym_phase]
       end
 
       # Generates the prepare_command shell script.
@@ -249,60 +414,20 @@ module Expo
         Pod::UI.info "#{"[Expo-precompiled] ".blue}Ensured artifacts for precompiled pods"
       end
 
-      # Adds script phases to the podspec:
-      # 1. XCFramework switch phase (before_compile) — extracts debug/release tarball
-      # 2. dSYM source map resolution phase (before_compile) — writes UUID plists into
-      #    the xcframework's embedded dSYMs so that Spotlight can find them
-      #    and lldb can resolve source paths via DBGSourcePathRemapping
+      # Adds script phases to the podspec for xcframework switching and dSYM resolution.
+      # Delegates to build_script_phases_json and converts string keys to symbols
+      # (CocoaPods inline API uses symbols, JSON serialization uses strings).
       #
       # @param spec [Pod::Spec] The podspec to add script phases to
       # @param product_name [String] The product/module name
       # @param pod_info [Hash] Package info from spm.config.json lookup
       def add_script_phases(spec, product_name, pod_info)
-        # Compute paths relative to installation_root so script phases don't contain absolute paths.
-        # For pod targets, $SRCROOT points to the Pods/ directory, so we use $PODS_ROOT/..
-        # to get back to the installation_root (e.g., <repo>/apps/bare-expo/ios).
-        project_root = Pod::Config.instance.installation_root  # e.g., <repo>/apps/bare-expo/ios
-        scripts_dir = __dir__
-        switch_script_rel = Pathname.new(File.join(scripts_dir, 'replace-xcframework.js')).relative_path_from(project_root).to_s
-        dsym_script_rel = Pathname.new(File.join(scripts_dir, 'resolve-dsym-sourcemaps.js')).relative_path_from(project_root).to_s
-        package_root_rel = Pathname.new(pod_info[:package_root]).relative_path_from(project_root).to_s
-
-        # $PODS_ROOT/.. = installation_root at build time
-        pods_parent = "$PODS_ROOT/.."
-        switch_script_path = "#{pods_parent}/#{switch_script_rel}"
-        dsym_script_path = "#{pods_parent}/#{dsym_script_rel}"
-        # XCFrameworks live directly in the pod directory: $PODS_ROOT/<PodName>/
-        xcframeworks_dir_var = "$PODS_ROOT/#{spec.name}"
-        package_root_var = "#{pods_parent}/#{package_root_rel}"
-
-        dsym_stamp = "$(DERIVED_FILE_DIR)/expo-dsym-resolve-#{product_name}-$(CONFIGURATION).stamp"
-
-        npm_package = pod_info[:npm_package]
-
-        # The switch phase uses always_out_of_date (like React Native) so Xcode always runs it.
-        # The shell fast-path (.last_build_configuration check) provides incremental build optimization.
-        switch_phase = {
-          :name => "[Expo] Switch #{spec.name} XCFramework for build configuration",
-          :execution_position => :before_compile,
-          :input_files => ["#{pods_parent}/#{switch_script_rel}"],
-          :script => xcframework_switch_script(product_name, xcframeworks_dir_var, switch_script_path),
-        }
-
-        # :always_out_of_date is only available in CocoaPods 1.13.0 and later
-        if Gem::Version.new(Pod::VERSION) >= Gem::Version.new('1.13.0')
-          switch_phase[:always_out_of_date] = "1"
+        json_phases = build_script_phases_json(spec.name, product_name, pod_info)
+        spec.script_phases = json_phases.map do |phase|
+          phase.each_with_object({}) do |(k, v), h|
+            h[k.to_sym] = k == 'execution_position' ? v.to_sym : v
+          end
         end
-
-        dsym_phase = {
-          :name => "[Expo] Resolve #{spec.name} dSYM source maps",
-          :execution_position => :before_compile,
-          :input_files => ["#{pods_parent}/#{dsym_script_rel}"],
-          :output_files => [dsym_stamp],
-          :script => dsym_resolve_script(product_name, xcframeworks_dir_var, dsym_script_path, npm_package, package_root_var),
-        }
-
-        spec.script_phases = [switch_phase, dsym_phase]
       end
 
       # Returns the shell script for the xcframework switch phase.
@@ -536,11 +661,7 @@ touch "$STAMP_FILE"
         pod_map.each do |pod_name, info|
           next unless info[:type] == :external
           next unless info[:codegen_name]
-
-          # Check if the XCFramework actually exists before excluding codegen
-          product_name = info[:product_name] || pod_name
-          build_tarball = File.join(info[:build_output_dir], build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
-          next unless File.exist?(build_tarball)
+          next unless resolve_prebuilt_info(pod_name)
 
           exclusions << info[:codegen_name]
           Pod::UI.info "#{('[Expo-precompiled]').blue} Found external package '#{info[:npm_package]}' with codegen module: #{info[:codegen_name]}"
@@ -637,6 +758,37 @@ touch "$STAMP_FILE"
       end
 
       private
+
+      # Resolves prebuilt xcframework info for a pod.
+      # Returns [pod_info, product_name, tarball_path] or nil if not available.
+      #
+      # @param pod_name [String] The pod name to look up
+      # @return [Array, nil] [pod_info, product_name, tarball_path] or nil
+      def resolve_prebuilt_info(pod_name)
+        pod_info = get_pod_lookup_map[pod_name]
+        return nil unless pod_info
+
+        product_name = pod_info[:product_name] || pod_name
+        tarball = File.join(pod_info[:build_output_dir], build_flavor, 'xcframeworks', "#{product_name}.tar.gz")
+        return nil unless File.exist?(tarball)
+
+        [pod_info, product_name, tarball]
+      end
+
+      # Builds the vendored_frameworks paths array for a prebuilt pod.
+      # Includes the product xcframework and any SPM dependency xcframeworks.
+      #
+      # @param product_name [String] The product/module name
+      # @param pod_info [Hash] Package info from spm.config.json lookup
+      # @return [Array<String>] vendored framework paths
+      def build_vendored_paths(product_name, pod_info)
+        paths = ["#{product_name}.xcframework"]
+        (pod_info[:spm_dependency_frameworks] || []).each do |dep_name|
+          paths << "#{dep_name}.xcframework"
+          Pod::UI.info "#{"[Expo-precompiled] ".blue}     📦 #{dep_name}.xcframework".green
+        end
+        paths
+      end
 
       # Removes source file references for prebuilt libraries from ReactCodegen compile sources.
       # This prevents Xcode from trying to compile codegen files that are already in the XCFrameworks.

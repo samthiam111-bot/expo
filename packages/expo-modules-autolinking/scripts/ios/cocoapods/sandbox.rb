@@ -2,6 +2,7 @@
 # See: https://github.com/CocoaPods/CocoaPods/blob/master/lib/cocoapods/sandbox.rb
 
 require 'json'
+require_relative '../precompiled_modules'
 
 REACT_DEFINE_MODULES_LIST = [
   'React-hermes',
@@ -26,6 +27,13 @@ module Pod
         spec_json['pod_target_xcconfig'] ||= {}
         spec_json['pod_target_xcconfig']['DEFINES_MODULE'] = 'YES'
         patched_spec = Specification.from_json(spec_json.to_json)
+      end
+
+      # Auto-patch precompiled module specs: if a pod has a prebuilt xcframework
+      # and hasn't already been configured via inline try_link_with_prebuilt_xcframework,
+      # patch the stored spec to use the xcframework instead of building from source.
+      if patched_spec.nil? && Expo::PrecompiledModules.should_auto_patch_spec?(name, spec)
+        patched_spec = Expo::PrecompiledModules.patch_spec_for_prebuilt(spec)
       end
 
       if patched_spec != nil

@@ -17,12 +17,9 @@ Pod::Spec.new do |s|
   s.source         = { git: 'https://github.com/expo/expo.git' }
   s.static_framework = true
 
-  if (!Expo::PackagesConfig.instance.try_link_with_prebuilt_xcframework(s))
-    s.static_framework = true
-    s.source_files = "#{s.name}/**/*.{h,m}"
+  s.source_files = "#{s.name}/**/*.{h,m}"
 
-    s.pod_target_xcconfig = {
-      'DEFINES_MODULE' => 'YES',
-    }
-  end
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+  }
 end

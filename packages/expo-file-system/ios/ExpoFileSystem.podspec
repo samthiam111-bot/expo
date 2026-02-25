@@ -22,12 +22,9 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
 
   # Swift/Objective-C compatibility
-  if (!Expo::PackagesConfig.instance.try_link_with_prebuilt_xcframework(s))
-    s.static_framework = true
-    s.pod_target_xcconfig = {
-      'DEFINES_MODULE' => 'YES'
-    }
-    s.resource_bundles = {'ExpoFileSystem_privacy' => ['PrivacyInfo.xcprivacy']}
-    s.source_files = "**/*.{h,m,swift}"
-  end
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES'
+  }
+  s.resource_bundles = {'ExpoFileSystem_privacy' => ['PrivacyInfo.xcprivacy']}
+  s.source_files = "**/*.{h,m,swift}"
 end

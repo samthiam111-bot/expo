@@ -17,17 +17,14 @@ Pod::Spec.new do |s|
   s.source         = { git: 'https://github.com/expo/expo.git' }
   s.static_framework = true
 
-  if (!Expo::PackagesConfig.instance.try_link_with_prebuilt_xcframework(s))
-    s.static_framework = true
-    s.source_files = "#{s.name}/**/*.{h,m,swift}"
+  s.source_files = "#{s.name}/**/*.{h,m,swift}"
 
-    s.pod_target_xcconfig = {
-      'GCC_TREAT_INCOMPATIBLE_POINTER_TYPE_WARNINGS_AS_ERRORS' => 'YES',
-      'GCC_TREAT_IMPLICIT_FUNCTION_DECLARATIONS_AS_ERRORS' => 'YES',
-      'DEFINES_MODULE' => 'YES',
-      'SWIFT_COMPILATION_MODE' => 'wholemodule'
-    }
-  end
+  s.pod_target_xcconfig = {
+    'GCC_TREAT_INCOMPATIBLE_POINTER_TYPE_WARNINGS_AS_ERRORS' => 'YES',
+    'GCC_TREAT_IMPLICIT_FUNCTION_DECLARATIONS_AS_ERRORS' => 'YES',
+    'DEFINES_MODULE' => 'YES',
+    'SWIFT_COMPILATION_MODE' => 'wholemodule'
+  }
 
   s.test_spec 'Tests' do |test_spec|
     test_spec.source_files = 'Tests/*.{h,m,swift}'
