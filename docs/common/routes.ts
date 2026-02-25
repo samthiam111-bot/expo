@@ -115,7 +115,7 @@ function getAncestorUrl(node: NavigationRoute): string {
       continue;
     }
     if (child.type === 'page' && child.href) {
-      if ((child as NavigationRoute & { isIndex?: boolean }).isIndex) {
+      if (child.isIndex) {
         return `${DOCS_ROOT}${child.href}`;
       }
     }
@@ -168,9 +168,7 @@ export function getBreadcrumbTrail(
       }
 
       const url =
-        item.node.type === 'page'
-          ? `${DOCS_ROOT}${item.node.href}`
-          : getAncestorUrl(item.node);
+        item.node.type === 'page' ? `${DOCS_ROOT}${item.node.href}` : getAncestorUrl(item.node);
 
       return { name: item.name, url };
     });
