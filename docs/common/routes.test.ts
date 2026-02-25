@@ -55,7 +55,7 @@ describe(getBreadcrumbTrail, () => {
     const trail = getBreadcrumbTrail(mockRoutes, '/develop/tools');
 
     expect(trail).toEqual([
-      { name: 'Develop', url: 'https://docs.expo.dev/develop' },
+      { name: 'Develop', url: 'https://docs.expo.dev' },
       { name: 'Tools' },
     ]);
   });
@@ -64,8 +64,8 @@ describe(getBreadcrumbTrail, () => {
     const trail = getBreadcrumbTrail(mockRoutes, '/develop/user-interface/fonts');
 
     expect(trail).toEqual([
-      { name: 'Develop', url: 'https://docs.expo.dev/develop' },
-      { name: 'User interface', url: 'https://docs.expo.dev/develop/user-interface' },
+      { name: 'Develop', url: 'https://docs.expo.dev' },
+      { name: 'User interface', url: 'https://docs.expo.dev' },
       { name: 'Fonts' },
     ]);
   });
@@ -128,7 +128,7 @@ describe(getBreadcrumbTrail, () => {
 
     const trail = getBreadcrumbTrail(routes, '/section/page');
     expect(trail).toEqual([
-      { name: 'Section', url: 'https://docs.expo.dev/section' },
+      { name: 'Section', url: 'https://docs.expo.dev' },
       { name: 'Page' },
     ]);
   });
@@ -145,6 +145,25 @@ describe(getBreadcrumbTrail, () => {
 
     const trail = getBreadcrumbTrail(routes, '/overview');
     expect(trail).toEqual([{ name: 'Overview' }]);
+  });
+
+  it('falls back to docs root for sections without an index page', () => {
+    const routes: NavigationRoute[] = [
+      {
+        type: 'section',
+        name: 'App signing',
+        href: '',
+        children: [
+          { type: 'page', name: 'App credentials', href: '/app-signing/app-credentials' },
+        ],
+      },
+    ];
+
+    const trail = getBreadcrumbTrail(routes, '/app-signing/app-credentials');
+    expect(trail[0]).toEqual({
+      name: 'App signing',
+      url: 'https://docs.expo.dev',
+    });
   });
 
   it('uses href directly for index page when deriving ancestor URL', () => {

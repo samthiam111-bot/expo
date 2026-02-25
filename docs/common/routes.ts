@@ -103,9 +103,11 @@ export const isRouteActive = (
   return linkUrl === stripVersionFromPath(pathname) || linkUrl === stripVersionFromPath(asPath);
 };
 
-function getAncestorUrl(node: NavigationRoute): string | undefined {
+const DOCS_ROOT = 'https://docs.expo.dev';
+
+function getAncestorUrl(node: NavigationRoute): string {
   if (!node.children) {
-    return undefined;
+    return DOCS_ROOT;
   }
 
   for (const child of node.children as NavigationRoute[]) {
@@ -114,21 +116,17 @@ function getAncestorUrl(node: NavigationRoute): string | undefined {
     }
     if (child.type === 'page' && child.href) {
       if ((child as NavigationRoute & { isIndex?: boolean }).isIndex) {
-        return `https://docs.expo.dev${child.href}`;
+        return `${DOCS_ROOT}${child.href}`;
       }
-      const parts = child.href.split('/');
-      parts.pop();
-      const parentPath = parts.join('/') || '/';
-      return `https://docs.expo.dev${parentPath}`;
     }
     if (child.children) {
       const url = getAncestorUrl(child);
-      if (url) {
+      if (url !== DOCS_ROOT) {
         return url;
       }
     }
   }
-  return undefined;
+  return DOCS_ROOT;
 }
 
 export function getBreadcrumbTrail(
@@ -171,10 +169,10 @@ export function getBreadcrumbTrail(
 
       const url =
         item.node.type === 'page'
-          ? `https://docs.expo.dev${item.node.href}`
+          ? `${DOCS_ROOT}${item.node.href}`
           : getAncestorUrl(item.node);
 
-      return { name: item.name, ...(url ? { url } : {}) };
+      return { name: item.name, url };
     });
 }
 
