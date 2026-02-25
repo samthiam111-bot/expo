@@ -54,10 +54,7 @@ describe(getBreadcrumbTrail, () => {
   it('returns 2-item trail for page directly under a section', () => {
     const trail = getBreadcrumbTrail(mockRoutes, '/develop/tools');
 
-    expect(trail).toEqual([
-      { name: 'Develop', url: 'https://docs.expo.dev' },
-      { name: 'Tools' },
-    ]);
+    expect(trail).toEqual([{ name: 'Develop', url: 'https://docs.expo.dev' }, { name: 'Tools' }]);
   });
 
   it('returns 3-item trail for page nested in a group', () => {
@@ -127,10 +124,7 @@ describe(getBreadcrumbTrail, () => {
     ] as unknown as NavigationRoute[];
 
     const trail = getBreadcrumbTrail(routes, '/section/page');
-    expect(trail).toEqual([
-      { name: 'Section', url: 'https://docs.expo.dev' },
-      { name: 'Page' },
-    ]);
+    expect(trail).toEqual([{ name: 'Section', url: 'https://docs.expo.dev' }, { name: 'Page' }]);
   });
 
   it('filters out empty-name ancestors', () => {
@@ -153,9 +147,7 @@ describe(getBreadcrumbTrail, () => {
         type: 'section',
         name: 'App signing',
         href: '',
-        children: [
-          { type: 'page', name: 'App credentials', href: '/app-signing/app-credentials' },
-        ],
+        children: [{ type: 'page', name: 'App credentials', href: '/app-signing/app-credentials' }],
       },
     ];
 
@@ -183,7 +175,7 @@ describe(getBreadcrumbTrail, () => {
                 name: 'Overview',
                 href: '/eas/environment-variables',
                 isIndex: true,
-              } as NavigationRoute,
+              },
               { type: 'page', name: 'Manage', href: '/eas/environment-variables/manage' },
             ],
           },
