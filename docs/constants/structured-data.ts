@@ -31,7 +31,7 @@ export const websiteSchema = {
     url: 'https://expo.dev',
     logo: {
       '@type': 'ImageObject',
-      url: 'https://raw.githubusercontent.com/expo/logos/main/png/logo-type-a.png',
+      url: 'https://docs.expo.dev/static/images/expo-logo.svg',
     },
     sameAs: [
       'https://github.com/expo',
