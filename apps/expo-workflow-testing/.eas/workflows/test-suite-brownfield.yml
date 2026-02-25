@@ -24,8 +24,86 @@ defaults:
     yarn: 1.22.22
 
 jobs:
+  detect_platform:
+    name: Detect platform changes
+    runs_on: linux-medium
+    image: latest
+    outputs:
+      should_run_ios: ${{ steps.detect.outputs.should_run_ios }}
+      should_run_android: ${{ steps.detect.outputs.should_run_android }}
+    steps:
+      - uses: eas/checkout
+      - id: detect
+        outputs: [should_run_ios, should_run_android]
+        run: |
+          EVENT_NAME="${{ github.event_name }}"
+          BASE_REF="${{ github.base_ref }}"
+          echo "EVENT_NAME=$EVENT_NAME"
+          echo "BASE_REF=$BASE_REF"
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "Not a pull request — running both platforms"
+            set-output should_run_ios "true"
+            set-output should_run_android "true"
+            exit 0
+          fi
+
+          # Fetch the base branch to compute a diff
+          FETCH_REF="${BASE_REF:-main}"
+          git fetch origin "$FETCH_REF" --depth=1000 2>/dev/null || git fetch origin main --depth=1000 2>/dev/null || true
+          MERGE_BASE=$(git merge-base "origin/$FETCH_REF" HEAD 2>/dev/null || echo "")
+
+          if [ -z "$MERGE_BASE" ]; then
+            echo "Could not find merge base — running both platforms"
+            set-output should_run_ios "true"
+            set-output should_run_android "true"
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only "$MERGE_BASE"...HEAD)
+
+          # Filter out ignored files (markdown, license, config, etc.)
+          FILTERED=$(echo "$CHANGED_FILES" \
+            | grep -v -E '\.(md)$' \
+            | grep -v -E '(LICENSE|CHANGELOG|\.gitignore|\.npmignore|\.eslintrc|\.prettierrc|\.gitattributes|\.watchmanconfig|\.fingerprintignore)' \
+            | grep -v -E '\.web\.' \
+            || true)
+
+          # Only keep files in relevant paths
+          RELEVANT=$(echo "$FILTERED" \
+            | grep -E '^(apps/brownfield-tester/|packages/(expo|expo-modules-core|expo-dev-client|expo-updates)/|apps/expo-workflow-testing/\.eas/workflows/test-suite-brownfield\.yml)' \
+            || true)
+
+          if [ -z "$RELEVANT" ]; then
+            echo "No relevant file changes detected"
+            set-output should_run_ios "false"
+            set-output should_run_android "false"
+            exit 0
+          fi
+
+          echo "Relevant changes:"
+          echo "$RELEVANT"
+
+          # Platform-specific: files under ios/ or android/ dirs
+          IOS_CHANGES=$(echo "$RELEVANT" | grep -E '/ios/' || true)
+          ANDROID_CHANGES=$(echo "$RELEVANT" | grep -E '/android/' || true)
+          # Common: relevant files NOT under ios/ or android/
+          COMMON_CHANGES=$(echo "$RELEVANT" | grep -v -E '/(ios|android)/' || true)
+
+          SHOULD_RUN_IOS="false"
+          SHOULD_RUN_ANDROID="false"
+          [ -n "$IOS_CHANGES" ] || [ -n "$COMMON_CHANGES" ] && SHOULD_RUN_IOS="true"
+          [ -n "$ANDROID_CHANGES" ] || [ -n "$COMMON_CHANGES" ] && SHOULD_RUN_ANDROID="true"
+
+          echo ""
+          echo "should_run_ios=$SHOULD_RUN_IOS"
+          echo "should_run_android=$SHOULD_RUN_ANDROID"
+          set-output should_run_ios "$SHOULD_RUN_IOS"
+          set-output should_run_android "$SHOULD_RUN_ANDROID"
+
   ios:
     name: iOS Build
+    needs: [detect_platform]
+    if: ${{ needs.detect_platform.outputs.should_run_ios == 'true' }}
     runs_on: macos-large
     image: latest
     steps:
@@ -50,6 +128,8 @@ jobs:
 
   android:
     name: Android Build
+    needs: [detect_platform]
+    if: ${{ needs.detect_platform.outputs.should_run_android == 'true' }}
     runs_on: linux-large
     image: latest
     env:
