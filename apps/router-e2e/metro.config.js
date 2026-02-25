@@ -54,6 +54,9 @@ config.watchFolders = [
 // Disable Babel's RC lookup, reducing the config loading in Babel - resulting in faster bootup for transformations
 config.transformer.enableBabelRCLookup = false;
 
+// Add xml to asset extensions for Android vector drawable icons used by @expo/ui
+config.resolver.assetExts.push('xml');
+
 config.resolver.blockList = [
   /\/expo-router\/node_modules\/@react-navigation/,
   /node_modules\/@react-navigation\/native-stack\/node_modules\/@react-navigation\//,
