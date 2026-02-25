@@ -7,6 +7,7 @@ import { Artifacts } from './Artifacts';
 import type { DownloadDependenciesOptions, DownloadedDependencies } from './Artifacts.types';
 import type { SPMPackageSource } from './ExternalPackage';
 import { BuildFlavor } from './Prebuilder.types';
+import { transformReactXCFrameworkAsync, isVFSGenerated } from './TransformReactXCFramework';
 import { createAsyncSpinner, SpinnerError } from './Utils';
 
 /**
@@ -311,6 +312,19 @@ export const Dependencies = {
       }
     );
 
+    // Generate VFS overlay and stage missing headers for stock Maven xcframework.
+    // The xcframework itself is never modified (preserves Meta's code signature).
+    // Skipped if already generated (has React-VFS-template.yaml next to xcframework).
+    const xcframeworkPath = path.join(reactNativePath, 'React.xcframework');
+    if (fs.existsSync(xcframeworkPath) && !isVFSGenerated(reactNativePath)) {
+      logger.info('🔄 Generating VFS overlay for stock React.xcframework...');
+      const reactNativeSourcePath = path.join(__dirname, '../../../node_modules/react-native');
+      await transformReactXCFrameworkAsync({
+        outputPath: reactNativePath,
+        reactNativePath: reactNativeSourcePath,
+      });
+    }
+
     // Generate the VFS overlay file from the template (resolves ${ROOT_PATH} placeholders)
     await resolveVFSOverlayTemplate(reactNativePath);
 
@@ -502,17 +516,15 @@ const downloadReactNativeAsync = async (
 /**
  * Resolves the VFS overlay template by replacing ${ROOT_PATH} placeholders
  * with the actual path to the React.xcframework.
+ * The template lives next to the xcframework (at outputPath level).
  * Only writes the file if content has changed to preserve mtime for incremental builds.
  */
 const resolveVFSOverlayTemplate = async (outputPath: string): Promise<void> => {
   const xcframeworkPath = path.join(outputPath, 'React.xcframework');
-  const vfsTemplatePath = path.join(xcframeworkPath, 'React-VFS-template.yaml');
+  const vfsTemplatePath = path.join(outputPath, 'React-VFS-template.yaml');
   const vfsOutputPath = path.join(outputPath, 'React-VFS.yaml');
 
   if (!fs.existsSync(vfsTemplatePath)) {
-    // VFS template may not exist in Maven artifacts - this is OK for builds that don't
-    // use the local React Native build (e.g., external packages using downloaded artifacts)
-    // The VFS overlay is only needed when building from react-native source
     return;
   }
 
