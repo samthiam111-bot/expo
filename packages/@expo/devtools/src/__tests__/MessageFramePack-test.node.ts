@@ -1,4 +1,4 @@
-import { MessageFramePacker } from '../MessageFramePacker';
+import { MessageFramePacker } from '../MessageFramePacker.js';
 
 describe(MessageFramePacker, () => {
   let packer: MessageFramePacker<string>;

@@ -2,16 +2,16 @@
 
 import { TextDecoder, TextEncoder } from 'node:util';
 
-import MockWebSocket from './MockWebSocket';
+import MockWebSocket from './MockWebSocket.js';
 import {
   cleanupDevToolsPluginInstances,
   getDevToolsPluginClientAsync,
-} from '../DevToolsPluginClientFactory';
-import { DevToolsPluginClientImplApp } from '../DevToolsPluginClientImplApp';
-import { DevToolsPluginClientImplBrowser } from '../DevToolsPluginClientImplBrowser';
-import { getConnectionInfo } from '../getConnectionInfo';
+} from '../DevToolsPluginClientFactory.js';
+import { DevToolsPluginClientImplApp } from '../DevToolsPluginClientImplApp.js';
+import { DevToolsPluginClientImplBrowser } from '../DevToolsPluginClientImplBrowser.js';
+import { getConnectionInfo } from '../getConnectionInfo.js';
 
-jest.mock('../getConnectionInfo');
+jest.mock('../getConnectionInfo.js');
 
 // @ts-expect-error - We don't mock all properties from WebSocket
 globalThis.WebSocket = MockWebSocket;

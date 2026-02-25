@@ -1,4 +1,4 @@
-import * as logger from '../logger';
+import * as logger from '../logger.js';
 
 describe('logger', () => {
   const spyLog = jest.spyOn(console, 'info').mockImplementation(() => {});

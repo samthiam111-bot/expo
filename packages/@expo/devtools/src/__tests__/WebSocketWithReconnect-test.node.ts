@@ -1,6 +1,6 @@
 import { WebSocket, WebSocketServer } from 'ws';
 
-import { WebSocketWithReconnect } from '../WebSocketWithReconnect';
+import { WebSocketWithReconnect } from '../WebSocketWithReconnect.js';
 
 // @ts-expect-error - The WebSocket from ws is not compatible with the globalThis.WebSocket
 globalThis.WebSocket = WebSocket;
