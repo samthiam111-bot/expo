@@ -12,6 +12,10 @@
 
 - bump android dependency ([#43345](https://github.com/expo/expo/pull/43345) by [@vonovak](https://github.com/vonovak))
 
+## 0.2.10 — 2026-02-25
+
+_This version does not introduce any user-facing changes._
+
 ## 0.2.9 — 2026-02-20
 
 _This version does not introduce any user-facing changes._

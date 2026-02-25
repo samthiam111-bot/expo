@@ -10,6 +10,16 @@
 
 ### 💡 Others
 
+## 55.0.0 — 2026-02-25
+
+### 🐛 Bug fixes
+
+- fix stack composition options in link preview ([#43334](https://github.com/expo/expo/pull/43334) by [@Ubax](https://github.com/Ubax))
+
+### 💡 Others
+
+- Pin screens to 4.24.0 ([#43379](https://github.com/expo/expo/pull/43379) by [@Ubax](https://github.com/Ubax))
+
 ## 55.0.0-preview.9 — 2026-02-20
 
 ### 🎉 New features
@@ -25,6 +35,7 @@
 ### 💡 Others
 
 - extract usePreviewTransition from NativeStackNavigator ([#43182](https://github.com/expo/expo/pull/43182) by [@Ubax](https://github.com/Ubax))
+- Updated `react-native-is-edge-to-edge` to `^1.2.1`. ([#43276](https://github.com/expo/expo/pull/43276) by [@zoontek](https://github.com/zoontek))
 
 ## 55.0.0-preview.8 — 2026-02-16
 
